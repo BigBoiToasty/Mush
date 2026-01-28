@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>React App</title>
+    <link rel="stylesheet" href="/src/styles.css">
+</head>
+<body>
+    <div id="root"></div>
+    <!-- Make sure this path points to your index.js file -->
+    <div id = "search" hidden = "hidden"> 
+    <input type = "text" id = "pokemonName" placeholder = "Pokemon Name"> 
+     <button onclick = "fetchPoke()">Find</button><br>
+     Cards Options <br>
+     </div>
+     <div id = "pokeGallery" hidden = "hidden">
+        
+     <br>
+     </div>
+
+     <div id = "selectedGallery" >
+        Selected Cards <br>
+        <div class = "box" id = "box">
+            <button onclick ="choosePoke()" id = "buttonCard" class = "buttonCard"> Choose Pokemon </button>
+        </div>
+     </div>
+
+    <script src="/src/index.js"></script>
+</body>
+</html>

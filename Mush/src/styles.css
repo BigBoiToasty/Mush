@@ -15,3 +15,15 @@
     align-items: center;
 
 }
+
+.testGallery{
+    display: grid;
+    grid-template-columns: repeat(3, 1fr); 
+    grid-template-rows: repeat(3, 1fr);
+    width: 400px;
+    height: 400px;  
+}
+
+.hidden {
+    display: none !important;
+}

@@ -20,8 +20,9 @@
     display: grid;
     grid-template-columns: repeat(3, 1fr); 
     grid-template-rows: repeat(3, 1fr);
-    width: 400px;
-    height: 400px;  
+    width: 900px;
+    height: auto;
+    gap: 10px;  
 }
 
 .hidden {

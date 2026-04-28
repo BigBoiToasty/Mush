@@ -1,10 +1,124 @@
-import { getCards, saveCards, deleteCard } from './cards'
+import { getCards, saveCards, deleteCard, getBinders, createBinders } from './cards'
+import { supabase } from './supabaseClient'
+
 
 var crutch;
 let activeBinderId = 1;
 let activePage = 1;
 let activeSlot = null;
 let activeUser = null; //Replace with SUPERBASE AUTH
+
+//Authentication
+
+async function showApp(user) {
+    activeUser = user;
+    document.getElementById('authContainer').setAttribute('hidden', 'hidden');
+    document.getElementById('appContainer').removeAttribute('hidden');
+    await loadBinders();
+    //loadBinderCards();
+}
+
+function showAuth() {
+    activeUser = null;
+    document.getElementById('appContainer').setAttribute('hidden', 'hidden');
+    document.getElementById('authContainer').removeAttribute('hidden');
+}
+
+function showAuthError(message) {
+    const err = document.getElementById('authError');
+    err.textContent = message;
+    err.removeAttribute('hidden');
+}
+
+async function handleLogin() {
+    const email = document.getElementById('authEmail').value.trim();
+    const password = document.getElementById('authPassword').value;
+ 
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return showAuthError(error.message);
+    showApp(data.user);
+}
+
+async function handleSignup() {
+    const email = document.getElementById('authEmail').value.trim();
+    const password = document.getElementById('authPassword').value;
+ 
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) return showAuthError(error.message);
+ 
+    // Supabase sends a confirmation email by default.
+    // If you have email confirmation disabled in your Supabase project,
+    // data.user will be set and we can log them in immediately.
+    if (data.user && data.session) {
+        showApp(data.user);
+    } else {
+        showAuthError('Check your email to confirm your account, then log in.');
+    }
+}
+ 
+async function handleLogout() {
+    await supabase.auth.signOut();
+    showAuth();
+}
+// Binder
+
+async function loadBinders() {
+    const binders = await getBinders(activeUser.id);
+    const select = document.getElementById('binderSelect');
+    select.innerHTML = '';
+ 
+    if (binders.length === 0) {
+        // New user — create a default binder for them automatically
+        const binder = await createBinders('My Binder', activeUser.id);
+        if (binder) {
+            const option = document.createElement('option');
+            option.value = binder.id;
+            option.textContent = binder.name;
+            select.appendChild(option);
+            activeBinderId = binder.id;
+        }
+    } else {
+        binders.forEach(binder => {
+            const option = document.createElement('option');
+            option.value = binder.id;
+            option.textContent = binder.name;
+            select.appendChild(option);
+        });
+        activeBinderId = binders[0].id;
+        select.value = activeBinderId;
+    }
+ 
+    activePage = 1;
+    await loadBinderCards();
+}
+
+async function handleCreateBinder() {
+    const input = document.getElementById('newBinderName');
+    const name = input.value.trim();
+    if (!name) return;
+ 
+    const binder = await createBinders(name, activeUser.id);
+    if (!binder) return;
+ 
+    input.value = '';
+ 
+    const select = document.getElementById('binderSelect');
+    const option = document.createElement('option');
+    option.value = binder.id;
+    option.textContent = binder.name;
+    select.appendChild(option);
+    select.value = binder.id;
+ 
+    activeBinderId = binder.id;
+    activePage = 1;
+    await loadBinderCards();
+}
+
+async function handleBinderSwitch() {
+    activeBinderId = parseInt(document.getElementById('binderSelect').value);
+    activePage = 1;
+    await loadBinderCards();
+}
 
 // Load cards for current page
 
@@ -45,7 +159,7 @@ async function handleNextPage() {
     await loadBinderCards();
 }
 
-// ── Card search ───────────────────────────────────────────────────────────────
+// Card search
 
 async function fetchPoke(){
     try{        
@@ -145,12 +259,14 @@ function choosePoke(event){
     toggleVisibility(document.getElementById("pokeGallery"));
     toggleVisibility(document.getElementById("search"));
     document.getElementById("testGallery").classList.toggle("hidden");
+    toggleVisibility(document.getElementById("pageControls"));
 }
 
 function closePokeSearch(){
     toggleVisibility(document.getElementById("pokeGallery"));
     toggleVisibility(document.getElementById("search"));
     document.getElementById("testGallery").classList.toggle("hidden");
+    toggleVisibility(document.getElementById("pageControls"));
 }
 
 // Initialzie Page
@@ -159,6 +275,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById("searchButton").addEventListener('click', fetchPoke);
     document.getElementById("prevPage").addEventListener('click', handlePrevPage);
     document.getElementById("nextPage").addEventListener('click', handleNextPage);
+    
+    document.getElementById("loginButton").addEventListener('click', handleLogin);
+    document.getElementById("signupButton").addEventListener('click', handleSignup);
+    document.getElementById("logoutButton").addEventListener('click', handleLogout);
 
-    await loadBinderCards();
+    document.getElementById("createBinderButton").addEventListener('click', handleCreateBinder);
+    document.getElementById("binderSelect").addEventListener('change', handleBinderSwitch);
+
+
+    //await loadBinderCards();
+    const { data } = await supabase.auth.getSession();
+    if (data.session) {
+        showApp(data.session.user);
+    } else {
+        showAuth();
+    }
+
+    toggleVisibility(document.getElementById("pageControls"));
+
 });

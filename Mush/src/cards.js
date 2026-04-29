@@ -70,3 +70,29 @@ export async function createBinders(name, userId) {
 
   return data
 }
+
+export async function getBinder(name, userId) {
+  const { data, error } = await supabase
+    .from('binders')
+    .select()
+    .eq('name', name)
+    .eq('user_id', userId)    
+    .single()
+
+  if (error) {
+    console.error('Binder get single error:', error)
+  }
+
+  return data
+}
+
+export async function deleteBinders(id) {
+  const { error } = await supabase
+    .from('binders')
+    .delete()
+    .eq('id', id)
+
+  if (error) {
+    console.error('Delete error:', error)
+  }
+}

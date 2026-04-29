@@ -1,4 +1,4 @@
-import { getCards, saveCards, deleteCard, getBinders, createBinders } from './cards'
+import { getCards, saveCards, deleteCard, getBinders, createBinders, deleteBinders, getBinder } from './cards'
 import { supabase } from './supabaseClient'
 
 
@@ -6,7 +6,8 @@ var crutch;
 let activeBinderId = 1;
 let activePage = 1;
 let activeSlot = null;
-let activeUser = null; //Replace with SUPERBASE AUTH
+let activeUser = null;
+let activeBinderName = null;
 
 //Authentication
 
@@ -47,8 +48,7 @@ async function handleSignup() {
     if (error) return showAuthError(error.message);
  
     // Supabase sends a confirmation email by default.
-    // If you have email confirmation disabled in your Supabase project,
-    // data.user will be set and we can log them in immediately.
+    // I disabled it. Should turn it on later
     if (data.user && data.session) {
         showApp(data.user);
     } else {
@@ -74,6 +74,7 @@ async function loadBinders() {
             const option = document.createElement('option');
             option.value = binder.id;
             option.textContent = binder.name;
+            activeBinderName = binder.name;
             select.appendChild(option);
             activeBinderId = binder.id;
         }
@@ -85,6 +86,7 @@ async function loadBinders() {
             select.appendChild(option);
         });
         activeBinderId = binders[0].id;
+        activeBinderName = binders[0].name;
         select.value = activeBinderId;
     }
  
@@ -110,12 +112,20 @@ async function handleCreateBinder() {
     select.value = binder.id;
  
     activeBinderId = binder.id;
+    activeBinderName = binder.name;
     activePage = 1;
     await loadBinderCards();
 }
 
+async function handleDeleteBinder() {
+    await deleteBinders(activeBinderId);
+
+    await loadBinders();
+}
+
 async function handleBinderSwitch() {
     activeBinderId = parseInt(document.getElementById('binderSelect').value);
+    //activeBinderName = selectElement.options[selectElement.selectedIndex].text;
     activePage = 1;
     await loadBinderCards();
 }
@@ -282,7 +292,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     document.getElementById("createBinderButton").addEventListener('click', handleCreateBinder);
     document.getElementById("binderSelect").addEventListener('change', handleBinderSwitch);
-
+    document.getElementById("deleteBinderButton").addEventListener('click', handleDeleteBinder);
 
     //await loadBinderCards();
     const { data } = await supabase.auth.getSession();

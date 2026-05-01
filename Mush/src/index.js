@@ -3,11 +3,11 @@ import { supabase } from './supabaseClient'
 
 
 var crutch;
-let activeBinderId = 1;
+let activeBinderId = null;
 let activePage = 1;
+let activePageSide = null;
 let activeSlot = null;
 let activeUser = null;
-let activeBinderName = null;
 
 //Authentication
 
@@ -74,7 +74,6 @@ async function loadBinders() {
             const option = document.createElement('option');
             option.value = binder.id;
             option.textContent = binder.name;
-            activeBinderName = binder.name;
             select.appendChild(option);
             activeBinderId = binder.id;
         }
@@ -86,7 +85,6 @@ async function loadBinders() {
             select.appendChild(option);
         });
         activeBinderId = binders[0].id;
-        activeBinderName = binders[0].name;
         select.value = activeBinderId;
     }
  
@@ -112,20 +110,18 @@ async function handleCreateBinder() {
     select.value = binder.id;
  
     activeBinderId = binder.id;
-    activeBinderName = binder.name;
     activePage = 1;
     await loadBinderCards();
 }
 
 async function handleDeleteBinder() {
     await deleteBinders(activeBinderId);
-
+    activePage = 1;
     await loadBinders();
 }
 
 async function handleBinderSwitch() {
     activeBinderId = parseInt(document.getElementById('binderSelect').value);
-    //activeBinderName = selectElement.options[selectElement.selectedIndex].text;
     activePage = 1;
     await loadBinderCards();
 }
@@ -133,39 +129,55 @@ async function handleBinderSwitch() {
 // Load cards for current page
 
 async function loadBinderCards() {
-    const gallery = document.getElementById('testGallery');
-    gallery.innerHTML = '';
-    binderSetup();
+    const leftPage = activePage;
+    const rightPage = activePage + 1;
+    binderSetup('leftGallery', leftPage);
+    binderSetup('rightGallery', rightPage);
 
-    const slots = await getCards(activeBinderId, activePage);
+    const [leftSlots, rightSlots] = await Promise.all([
+        getCards(activeBinderId, leftPage),
+        getCards(activeBinderId, rightPage)
+    ]);
+
+    populateGrid('leftGallery', leftSlots, leftPage);
+    populateGrid('rightGallery', rightSlots, rightPage);
+
+    document.getElementById('pageLabel').textContent = `Pages ${leftPage}-${rightPage}`;
+
+    const pageControls = document.getElementById('pageControls');
+    if (pageControls.hasAttribute('hidden')) pageControls.removeAttribute('hidden');
+
+}
+
+function populateGrid(galleryId, slots, pageNumber) {
+    const gallery = document.getElementById(galleryId);
     slots.forEach(slot => {
         const box = gallery.children[slot.slot_number];
         if (!box) return;
-
+ 
         const img = document.createElement('img');
         img.src = slot.card_image;
         img.dataset.slotNumber = slot.slot_number;
-        img.style.width = '225px';
-        img.style.height = '315px';
+        img.dataset.pageNumber = pageNumber;
+        //img.style.width = '225px';
+        //img.style.height = '315px';
         img.addEventListener('click', removePoke);
-
+ 
         box.appendChild(img);
         toggleVisibility(box.querySelector('button'));
     });
-
-    document.getElementById('pageLabel').textContent = `Page ${activePage}`;
 }
 
 // Page controller
 
 async function handlePrevPage() {
     if (activePage <= 1) return;
-    activePage--;
+    activePage -= 2;
     await loadBinderCards();
 }
 
 async function handleNextPage() {
-    activePage++;
+    activePage += 2;
     await loadBinderCards();
 }
 
@@ -208,15 +220,18 @@ async function selectPoke(event){
 
     img.removeEventListener("click", selectPoke);
     img.dataset.slotNumber = activeSlot;
+    img.dataset.pageNumber = activePageSide === 'left' ? activePage : activePage + 1;
     img.addEventListener("click", removePoke);
 
     selectgallery.appendChild(img);
     closePokeSearch();
     toggleVisibility(crutch.querySelector("button"));
 
+    const pageNumber = activePageSide === 'left' ? activePage : activePage + 1;
+
     await saveCards({
         binder_id: activeBinderId,
-        page_number: activePage,
+        page_number: pageNumber,
         slot_number: activeSlot,
         card_id: img.dataset.cardId,
         card_image: img.dataset.cardImage
@@ -227,22 +242,25 @@ async function removePoke(event){
     const img = event.target;
     const box = img.parentElement;
     const slotNumber = parseInt(img.dataset.slotNumber);
+    const pageNumber = parseInt(img.dataset.pageNumber);
 
     box.removeChild(img);
     toggleVisibility(box.querySelector("button"));
 
-    await deleteCard(activeBinderId, activePage, slotNumber);
+    await deleteCard(activeBinderId, pageNumber, slotNumber);
 }
 
 // Binder grid
 
-function binderSetup(){
-    const selectedGallery = document.getElementById("testGallery");
+function binderSetup(galleryId, pageNumber){
+    const selectedGallery = document.getElementById(galleryId);
     selectedGallery.innerHTML = '';
     for(let i = 0; i <= 8; i++){
         const box = document.createElement("div");
         box.classList.add('box');
         box.dataset.slot = i;
+        box.dataset.galleryId = galleryId;
+        box.dataset.pageNumber = pageNumber;
 
         const buttonCard = document.createElement("button");
         buttonCard.innerHTML = "Choose Pokemon";
@@ -263,19 +281,21 @@ function toggleVisibility(element){
 }
 
 function choosePoke(event){
-    crutch = event.target.parentElement;
+    const box = event.target.parentElement;
+    crutch = box;
     activeSlot = parseInt(crutch.dataset.slot);
+    activePageSide = box.dataset.galleryId === 'leftGallery' ? 'left' : 'right';
 
     toggleVisibility(document.getElementById("pokeGallery"));
     toggleVisibility(document.getElementById("search"));
-    document.getElementById("testGallery").classList.toggle("hidden");
+    document.getElementById("binderView").classList.toggle("hidden");
     toggleVisibility(document.getElementById("pageControls"));
 }
 
 function closePokeSearch(){
     toggleVisibility(document.getElementById("pokeGallery"));
     toggleVisibility(document.getElementById("search"));
-    document.getElementById("testGallery").classList.toggle("hidden");
+    document.getElementById("binderView").classList.toggle("hidden");
     toggleVisibility(document.getElementById("pageControls"));
 }
 
@@ -297,11 +317,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     //await loadBinderCards();
     const { data } = await supabase.auth.getSession();
     if (data.session) {
-        showApp(data.session.user);
+        await showApp(data.session.user);
     } else {
         showAuth();
     }
-
-    toggleVisibility(document.getElementById("pageControls"));
 
 });

@@ -1,28 +1,61 @@
-.box {
-    width: 228px;
-    height: 318px;
-
-    border: 2px solid black; 
-
-    margin: 20px;
-
-    background-color: lightgray;
-    
+/* Reset all items on page's margin and padding */
+*, *::before, *::after {
     box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+.box {
+    width: 100%;
+    aspect-ratio: 2.5 / 3.5; 
+
+    border: 2px solid #333;
+    background-color: lightgray;
+    overflow: hidden;
 
     display: flex;
     justify-content: center;
     align-items: center;
-
 }
 
-.testGallery{
+.box img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+
+.testGallery {
     display: grid;
-    grid-template-columns: repeat(3, 1fr); 
+    grid-template-columns: repeat(3, 1fr);
     grid-template-rows: repeat(3, 1fr);
-    width: 900px;
-    height: auto;
-    gap: 10px;  
+    width: 100%;
+    gap: clamp(4px, 1%, 10px);
+}
+
+#binderView {
+    display: flex;
+    flex-direction: row;
+    gap: clamp(8px, 2vw, 40px);
+    padding: clamp(8px, 2vw, 20px);
+
+    width: 100%;
+    max-width: 1600px;
+    margin: 0 auto;
+}
+
+/* Each page takes exactly half the binder */
+#binderView .testGallery {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+/* Stacks pages vertically on narrow screens */
+@media (max-width: 600px) {
+    #binderView {
+        flex-direction: column;
+    }
 }
 
 .hidden {

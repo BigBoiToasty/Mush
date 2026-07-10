@@ -23,3 +23,15 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+.claude
+.superpowers
+.agents
+.impeccable
+docs
+skills-lock.json
+.serena
+PRODUCT.md
+headroom_memory.db
+
+.mcp.json

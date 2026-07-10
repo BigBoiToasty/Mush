@@ -1,0 +1,33 @@
+﻿@import "tailwindcss";
+
+/* Matches the app's dark theme so the brief loading gap (auth/profile/binder
+   fetch) never flashes the browser's default white background. */
+html, body { background: #081c3a; }
+
+/* User-supplied fonts (src/assets/fonts). Names here are what the UI uses. */
+@font-face { font-family: "Munro";                  src: url("./assets/fonts/Munro-2LYe.ttf"); }
+@font-face { font-family: "Munro Narrow";           src: url("./assets/fonts/MunroNarrow-vaO4.ttf"); }
+@font-face { font-family: "Munro Small";            src: url("./assets/fonts/MunroSmall-wPZw.ttf"); }
+@font-face { font-family: "Pixel Noir";             src: url("./assets/fonts/Pixel-Noir.ttf"); }
+@font-face { font-family: "Pixel Noir Caps";        src: url("./assets/fonts/Pixel-Noir-Caps.ttf"); }
+@font-face { font-family: "Pixel Noir Skinny";      src: url("./assets/fonts/Pixel-Noir-Skinny.ttf"); }
+@font-face { font-family: "Pixel Noir Skinny Caps"; src: url("./assets/fonts/Pixel-Noir-Skinny-Caps.ttf"); }
+@font-face { font-family: "Pixel Noir Skinny Short";src: url("./assets/fonts/Pixel-Noir-Skinny-Short.ttf"); }
+@font-face { font-family: "RetroByte";              src: url("./assets/fonts/RetroByte.ttf"); }
+
+/* 8-bit frame: chunky black border with stepped (notched) corners, drawn from
+   a 6x6 pixel SVG. border-width in cqw keeps it scaling with the card. */
+@keyframes curl-in  { from { background-position: 0%   0%; } to { background-position: 100% 0%; } }
+@keyframes curl-out { from { background-position: 100% 0%; } to { background-position: 0%   0%; } }
+.curl-in  { animation: curl-in  700ms steps(5, end) forwards; }
+.curl-out { animation: curl-out 700ms steps(5, end) forwards; }
+
+.pixel-box {
+  border-style: solid;
+  border-width: 1cqw;
+  border-image-source: url("./assets/pixel-border.svg");
+  border-image-slice: 2;
+  border-image-repeat: stretch;
+}
+
+

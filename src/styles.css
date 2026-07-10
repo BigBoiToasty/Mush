@@ -1,0 +1,801 @@
+/* Reset all items on page's margin and padding.
+   Wrapped in Tailwind's own "base" layer -- an unlayered rule here would
+   beat every Tailwind utility (p-4, px-20, etc.) regardless of specificity
+   or source order, since unlayered CSS always wins over layered CSS. That
+   silently zeroed out every padding/margin utility class in the app. */
+@layer base {
+    *, *::before, *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
+}
+
+.box {
+    width: 100%;
+    aspect-ratio: 2.5 / 3.5; 
+
+    border: 2px solid #333;
+    background-color: lightgray;
+    overflow: hidden;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* The slot whose card is currently picked up for a move. box-shadow renders
+   outside the border box, so .box's overflow:hidden doesn't clip the glow. */
+.box.box-held {
+    border-color: #3b9dff;
+    box-shadow: 0 0 0 2px #3b9dff, 0 0 12px 3px rgba(59, 157, 255, 0.85);
+}
+
+.box button {
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+    display: block;
+}
+
+.box img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+
+.testGallery {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    width: 87%; /* sized + centered by the parent .binder-page-left/right zone */
+    aspect-ratio: 2.5 / 3.5; /* 3x3 true-ratio cards -> same overall ratio as one card */
+    gap: clamp(4px, 1%, 10px);
+}
+
+/* Fills whatever space the page chrome (heading/nav/logout) leaves behind.
+   container-type: size exposes cqw/cqh sized to *this* box, which #binderView
+   uses below to compute the largest fit on both axes at once. #binderView has
+   no in-flow content (its children are all position:absolute), so it can't
+   rely on aspect-ratio auto-sizing from content -- it needs an explicit
+   width/height formula instead. */
+.binder-scale-wrap {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    container-type: size;
+}
+
+/* Notebook artwork (src/assets/binder-notebook.png, 642x385) -- cropped flush
+   to the black border (no white margin outside it like the raw Figma export
+   had) with the isolated white pixel wedges at the four rounded corners
+   flood-filled to transparent, so the page background shows through cleanly
+   there instead of leaving a stray white notch. Sets the page/spiral/border
+   art; card grids are positioned over it by % so they line up with the
+   image regardless of rendered size.
+   width/height are the classic "contain" formula: each is capped by both the
+   wrap's own size and the other axis scaled by the image's aspect ratio, so
+   together they always preserve 642:385 while fitting entirely inside the
+   wrap -- whichever of width/height is tighter wins, no scrolling either way.
+   container-type: inline-size makes #binderView's own width available as cqw
+   to descendants (see .box button) so text scales with the binder itself. */
+#binderView {
+    position: relative;
+    width: min(100cqw, 100cqh * (642 / 385));
+    height: min(100cqh, 100cqw * (385 / 642));
+    container-type: inline-size;
+}
+
+.binder-notebook-bg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: fill;
+    pointer-events: none;
+    user-select: none;
+}
+
+/* Left/right page content areas flank the spiral (re-measured against the
+   cropped 642x385 artwork: border ends ~10px in, spiral spans ~306-332px),
+   inset slightly past the border for breathing room.
+   Each zone centers its (true-ratio) card grid via flex. */
+.binder-page-left,
+.binder-page-right {
+    position: absolute;
+    top: 2.5%;
+    bottom: 2.5%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.binder-page-left {
+    left: 2%;
+    right: 52.8%;
+}
+
+.binder-page-right {
+    /* Exact mirror of .binder-page-left's 2% / 52.8% -- it was previously
+       52.2%/2.2%, making this zone ~0.4% wider than the left one. Small as
+       that sounds, it was enough to flip "Choose Pokemon" from one line to
+       two between the two pages at the same viewport size. */
+    left: 52.8%;
+    right: 2%;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Empty-slot "Choose Pokemon" text button only -- kept off .box button
+   itself so the padding/font-size here don't inset the filled-slot image
+   button (see .box button above, which stays padding:0 to fill the slot). */
+.box-empty-btn {
+    /* cqw is relative to #binderView's own width, so button text scales
+       up/down together with the binder instead of staying a fixed size. */
+    font-size: clamp(0.55rem, 3.2cqw, 1rem);
+    padding: clamp(2px, 1cqw, 8px);
+    text-align: center;
+    background: transparent;
+}
+
+/* Card search modal */
+.card-search-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    /* flex-start + padding-top instead of justify-content:center -- centering
+       the whole column would drag the search bar up toward the top edge as
+       the results grid grows tall (up to 60vh), which read as "stuck at the
+       very top" once results loaded. Anchoring keeps it in the same spot. */
+    justify-content: flex-start;
+    padding-top: 12vh;
+    gap: 16px;
+    padding-left: 20px;
+    padding-right: 20px;
+    z-index: 10;
+}
+
+.card-search-bar {
+    background: #d9d9d9;
+    border: 2px solid #0a0a0a;
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.card-search-results {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 8px;
+    max-width: 900px;
+    max-height: 60vh;
+    overflow-y: auto;
+    background: rgba(20, 20, 20, 0.75);
+    padding: 12px;
+    border-radius: 8px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+}
+
+.card-search-results img {
+    width: 100%;
+    aspect-ratio: 2.5 / 3.5;
+    object-fit: cover;
+    cursor: pointer;
+    border: 2px solid #0a0a0a;
+}
+
+.find-in-binder-result {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    color: #f0f0f0;
+    text-align: center;
+    cursor: pointer;
+}
+
+.card-search-error {
+    color: #ffb4b4;
+}
+
+/* Card detail popup -- z-index above .card-search-overlay (10) since it can
+   be opened from inside the search overlay's result grid. */
+.card-detail-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 20;
+}
+
+.card-detail-panel {
+    background: rgba(20, 20, 20, 0.9);
+    color: #f0f0f0;
+    border: 2px solid #0a0a0a;
+    border-radius: 8px;
+    padding: 20px;
+    max-width: 480px;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.card-detail-image {
+    width: 200px;
+    aspect-ratio: 2.5 / 3.5;
+    object-fit: cover;
+    border: 2px solid #0a0a0a;
+    border-radius: 4px;
+    cursor: zoom-in;
+    transition: width 0.25s ease;
+}
+
+/* Click-to-zoom in the detail popup; capped so it stays inside the panel
+   (max-width 480px incl. padding) and the viewport on phones. */
+.card-detail-image--zoomed {
+    width: min(70vw, 420px);
+    cursor: zoom-out;
+}
+
+.card-detail-info {
+    width: 100%;
+}
+
+.card-detail-section {
+    margin-top: 8px;
+}
+
+.card-detail-flavor {
+    font-style: italic;
+    opacity: 0.8;
+}
+
+.card-detail-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+}
+
+.card-detail-variant-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 4px;
+}
+
+.card-detail-variant-picker label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+}
+
+/* --- Holo tilt + shine ---------------------------------------------------
+   Tilt math and shine layering adapted from simeydotme/pokemon-cards-css
+   (GPL-3.0), https://github.com/simeydotme/pokemon-cards-css -- the
+   card.css/base.css/reverse-holo.css shine recipes and Card.svelte's
+   pointer-interaction math. This project is GPL-3.0 licensed (see LICENSE)
+   to keep this derivative legal. Adapted for this project's own DOM
+   structure and class names: CSS `transition` on `@property`-registered
+   custom properties replaces the original's JS spring-physics smoothing,
+   and there's no clip-path/foil-texture masking since we don't have
+   per-card silhouette assets -- the effect covers the full card image. */
+
+@property --rotate-x { syntax: '<angle>'; inherits: true; initial-value: 0deg; }
+@property --rotate-y { syntax: '<angle>'; inherits: true; initial-value: 0deg; }
+@property --pointer-x { syntax: '<percentage>'; inherits: true; initial-value: 50%; }
+@property --pointer-y { syntax: '<percentage>'; inherits: true; initial-value: 50%; }
+@property --background-x { syntax: '<percentage>'; inherits: true; initial-value: 50%; }
+@property --background-y { syntax: '<percentage>'; inherits: true; initial-value: 50%; }
+@property --card-opacity { syntax: '<number>'; inherits: true; initial-value: 0; }
+@property --pointer-from-center { syntax: '<number>'; inherits: true; initial-value: 0; }
+@property --pointer-from-left { syntax: '<number>'; inherits: true; initial-value: 0.5; }
+@property --pointer-from-top { syntax: '<number>'; inherits: true; initial-value: 0.5; }
+
+.card-holo-translater {
+    perspective: 900px;
+}
+
+.card-holo-rotator {
+    /* Texture tiles from the pokemon-cards-css repo (GPL-3.0, see the
+       section comment above) and its shared color ramps. */
+    --grain: url("./assets/holo/grain.webp");
+    --glitter: url("./assets/holo/glitter.png");
+    --foil-illusion: url("./assets/holo/illusion-mask.png");
+    --foil-vmax: url("./assets/holo/vmaxbg.jpg");
+    --glittersize: 25%;
+    --space: 5%;
+    --angle: 133deg;
+    --sunpillar-1: hsl(2, 100%, 73%);
+    --sunpillar-2: hsl(53, 100%, 69%);
+    --sunpillar-3: hsl(93, 100%, 69%);
+    --sunpillar-4: hsl(176, 100%, 76%);
+    --sunpillar-5: hsl(228, 100%, 74%);
+    --sunpillar-6: hsl(283, 100%, 73%);
+    --sunpillar-clr-1: var(--sunpillar-1);
+    --sunpillar-clr-2: var(--sunpillar-2);
+    --sunpillar-clr-3: var(--sunpillar-3);
+    --sunpillar-clr-4: var(--sunpillar-4);
+    --sunpillar-clr-5: var(--sunpillar-5);
+    --sunpillar-clr-6: var(--sunpillar-6);
+
+    position: relative;
+    display: inline-block;
+    border-radius: 4px;
+    transform: rotateY(var(--rotate-x)) rotateX(var(--rotate-y));
+    transform-style: preserve-3d;
+    will-change: transform;
+    transition:
+        --rotate-x 0.4s ease-out, --rotate-y 0.4s ease-out,
+        --pointer-x 0.4s ease-out, --pointer-y 0.4s ease-out,
+        --background-x 0.4s ease-out, --background-y 0.4s ease-out,
+        --card-opacity 0.4s ease-out, --pointer-from-center 0.4s ease-out,
+        --pointer-from-left 0.4s ease-out, --pointer-from-top 0.4s ease-out;
+}
+
+/* Inside a binder grid slot the wrapper must fill the slot's button, and
+   the slot keeps its square-cornered pixel look (no rounding). */
+.box .card-holo-translater,
+.box .card-holo-rotator {
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+}
+
+.card-holo-shine,
+.card-holo-glare {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.card-holo-shine::before,
+.card-holo-shine::after,
+.card-holo-glare::after {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+}
+
+/* Base shine/glare (per base.css): recipes below override what they need. */
+.card-holo-shine {
+    opacity: var(--card-opacity);
+    mix-blend-mode: color-dodge;
+    filter: brightness(0.85) contrast(2.75) saturate(0.65);
+    background-size: cover;
+    background-position: center;
+}
+
+.card-holo-glare {
+    opacity: var(--card-opacity);
+    mix-blend-mode: overlay;
+    background-image: radial-gradient(
+        farthest-corner circle at var(--pointer-x) var(--pointer-y),
+        hsla(0, 0%, 100%, 0.8) 10%,
+        hsla(0, 0%, 100%, 0.65) 20%,
+        hsla(0, 0%, 0%, 0.5) 90%
+    );
+}
+
+/* Each shine pseudo shifts the sunpillar ramp so the layered copies don't
+   line up color-for-color (per base.css). */
+.card-holo-shine::before,
+.card-holo-shine::after {
+    --sunpillar-clr-1: var(--sunpillar-5);
+    --sunpillar-clr-2: var(--sunpillar-6);
+    --sunpillar-clr-3: var(--sunpillar-1);
+    --sunpillar-clr-4: var(--sunpillar-2);
+    --sunpillar-clr-5: var(--sunpillar-3);
+    --sunpillar-clr-6: var(--sunpillar-4);
+}
+
+.card-holo-shine::after {
+    --sunpillar-clr-1: var(--sunpillar-6);
+    --sunpillar-clr-2: var(--sunpillar-1);
+    --sunpillar-clr-3: var(--sunpillar-2);
+    --sunpillar-clr-4: var(--sunpillar-3);
+    --sunpillar-clr-5: var(--sunpillar-4);
+    --sunpillar-clr-6: var(--sunpillar-5);
+}
+
+/* HOLO -- ported from regular-holo.css ("rare holo"): a smooth 110deg
+   repeating rainbow overlay-blended with 1px vertical scanlines, then
+   color-dodged onto the card. ::before adds two counter-moving "bar"
+   patterns (hard-light) for the sweeping foil ribbons; ::after darkens
+   everything away from the pointer (luminosity) so only the lit region
+   shows the rainbow. Applied to the full card since we have no per-card
+   illustration-window clip paths. */
+.card-holo-rotator--holo .card-holo-shine {
+    --scanlines-space: 1px;
+    --bars: 3%;
+    --bar-color: hsla(0, 0%, 70%, 1);
+    --bar-bg: hsla(0, 0%, 0%, 1);
+
+    /* Classic holo rares foil only the illustration window (the demo's
+       --clip inset); pseudos inherit the clip from this parent. */
+    clip-path: inset(9.85% 8% 52.85% 8%);
+
+    opacity: var(--card-opacity);
+    background-image:
+        repeating-linear-gradient(
+            110deg,
+            #c929f1, #0dbde9, #21e985, #eedf10, #f80e35,
+            #c929f1, #0dbde9, #21e985, #eedf10, #f80e35,
+            #c929f1, #0dbde9, #21e985, #eedf10, #f80e35
+        ),
+        repeating-linear-gradient(
+            90deg,
+            black calc(var(--scanlines-space) * 0), black calc(var(--scanlines-space) * 2),
+            #666 calc(var(--scanlines-space) * 2), #666 calc(var(--scanlines-space) * 4)
+        );
+    background-position:
+        calc(((50% - var(--background-x)) * 2.6) + 50%) calc(((50% - var(--background-y)) * 3.5) + 50%),
+        center center;
+    background-size: 400% 400%, cover;
+    background-blend-mode: overlay;
+    filter: brightness(1.1) contrast(1.1) saturate(1.2);
+    mix-blend-mode: color-dodge;
+}
+
+.card-holo-rotator--holo .card-holo-shine::before {
+    content: "";
+    background-image:
+        repeating-linear-gradient(
+            90deg,
+            var(--bar-bg) calc(var(--bars) * 2),
+            var(--bar-color) calc(var(--bars) * 3),
+            var(--bar-bg) calc(var(--bars) * 3.5),
+            var(--bar-color) calc(var(--bars) * 4),
+            var(--bar-bg) calc(var(--bars) * 5),
+            var(--bar-bg) calc(var(--bars) * 14)
+        ),
+        repeating-linear-gradient(
+            90deg,
+            var(--bar-bg) calc(var(--bars) * 2),
+            var(--bar-color) calc(var(--bars) * 3),
+            var(--bar-bg) calc(var(--bars) * 3.5),
+            var(--bar-color) calc(var(--bars) * 4),
+            var(--bar-bg) calc(var(--bars) * 5),
+            var(--bar-bg) calc(var(--bars) * 10)
+        );
+    background-position:
+        calc((((50% - var(--background-x)) * 1.65) + 50%) + (var(--background-y) * 0.5)) var(--background-x),
+        calc((((50% - var(--background-x)) * -0.9) + 50%) - (var(--background-y) * 0.75)) var(--background-y);
+    background-size: 200% 200%, 200% 200%;
+    background-blend-mode: screen;
+    filter: brightness(1.15) contrast(1.1);
+    mix-blend-mode: hard-light;
+}
+
+.card-holo-rotator--holo .card-holo-shine::after {
+    content: "";
+    background-image: radial-gradient(
+        farthest-corner circle at var(--pointer-x) var(--pointer-y),
+        hsla(0, 0%, 90%, 0.8) 0%,
+        hsla(0, 0%, 78%, 0.1) 25%,
+        hsl(0, 0%, 0%) 90%
+    );
+    background-position: center center;
+    background-size: cover;
+    mix-blend-mode: luminosity;
+    filter: brightness(0.6) contrast(4);
+}
+
+.card-holo-rotator--holo .card-holo-glare {
+    clip-path: inset(9.85% 8% 52.85% 8%);
+    opacity: calc(var(--card-opacity) * 0.8);
+    filter: brightness(0.8) contrast(1.5);
+    mix-blend-mode: overlay;
+    background-image: radial-gradient(
+        farthest-corner circle at var(--pointer-x) var(--pointer-y),
+        hsla(0, 0%, 100%, 0.8) 10%,
+        hsla(0, 0%, 100%, 0.65) 20%,
+        hsla(0, 0%, 0%, 0.5) 90%
+    );
+}
+
+.card-holo-rotator--holo .card-holo-glare::after {
+    content: "";
+    background-image: radial-gradient(
+        farthest-corner circle at var(--pointer-x) var(--pointer-y),
+        hsl(180, 100%, 95%) 5%,
+        hsla(0, 0%, 39%, 0.25) 55%,
+        hsla(0, 0%, 0%, 0.36) 110%
+    );
+    mix-blend-mode: overlay;
+    filter: brightness(0.6) contrast(3);
+}
+
+/* REVERSE HOLO -- ported from reverse-holo.css (no-mask path): a pointer-
+   tracked white/black/white radial soft-lighted against a -45deg diagonal
+   stripe via `difference` (the trick that reads as metallic sheen), then
+   color-dodged onto the card. Opacity dims as the pointer nears the card
+   edges. */
+.card-holo-rotator--reverse .card-holo-shine {
+    /* Plain sheen, no foil pattern texture -- by request. */
+    opacity: calc((1.5 * var(--card-opacity)) - var(--pointer-from-center));
+    background-image:
+        radial-gradient(
+            circle at var(--pointer-x) var(--pointer-y),
+            #fff 5%,
+            #000 50%,
+            #fff 80%
+        ),
+        linear-gradient(-45deg, #000 15%, #fff, #000 85%);
+    background-blend-mode: soft-light, difference;
+    background-size: 120% 120%, 200% 200%;
+    background-position:
+        center center,
+        calc(100% * var(--pointer-from-left)) calc(100% * var(--pointer-from-top));
+    filter: brightness(0.55) contrast(1.5) saturate(1);
+    mix-blend-mode: color-dodge;
+    /* Reverse holo foils everything EXCEPT the illustration window --
+       the demo's --clip-invert polygon for standard card layouts. */
+    clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 0 47.15%, 91.5% 47.15%, 91.5% 9.85%, 8% 9.85%, 8% 47.15%, 0 50%);
+}
+
+.card-holo-rotator--reverse .card-holo-glare {
+    opacity: var(--card-opacity);
+    filter: brightness(0.7) contrast(1.5);
+    mix-blend-mode: overlay;
+    background-image: radial-gradient(
+        farthest-corner circle at var(--pointer-x) var(--pointer-y),
+        hsla(0, 0%, 100%, 0.8) 10%,
+        hsla(0, 0%, 100%, 0.5) 20%,
+        hsla(0, 0%, 0%, 0.75) 90%
+    );
+    /* Match the shine: foil sheen surrounds the illustration window but
+       never covers the artwork itself (real reverse holo prints leave the
+       illustration non-foil). */
+    clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 0 47.15%, 91.5% 47.15%, 91.5% 9.85%, 8% 9.85%, 8% 47.15%, 0 50%);
+}
+
+.card-holo-rotator--reverse .card-holo-glare::after {
+    content: "";
+    background-image: radial-gradient(
+        farthest-corner circle at var(--pointer-x) var(--pointer-y),
+        hsl(0, 0%, 100%) 10%,
+        hsla(0, 0%, 100%, 0.5) 20%,
+        hsla(0, 0%, 0%, 0.5) 120%
+    );
+    filter: brightness(1) contrast(1.5);
+}
+
+/* V / GX / EX / ULTRA -- ported from v-regular.css ("rare holo v"): grain
+   texture screened over a vertical sunpillar ramp, hue-blended with the
+   133deg dark metallic stripes, plus a darkening radial. ::after repeats
+   the stack moving the metallic layer opposite, soft-lighted on top. */
+.card-holo-rotator--v .card-holo-shine,
+.card-holo-rotator--v .card-holo-shine::after {
+    --imgsize: 500px;
+    background-image:
+        var(--grain),
+        repeating-linear-gradient(
+            0deg,
+            var(--sunpillar-clr-1) calc(var(--space) * 1),
+            var(--sunpillar-clr-2) calc(var(--space) * 2),
+            var(--sunpillar-clr-3) calc(var(--space) * 3),
+            var(--sunpillar-clr-4) calc(var(--space) * 4),
+            var(--sunpillar-clr-5) calc(var(--space) * 5),
+            var(--sunpillar-clr-6) calc(var(--space) * 6),
+            var(--sunpillar-clr-1) calc(var(--space) * 7)
+        ),
+        repeating-linear-gradient(
+            var(--angle),
+            #0e152e 0%,
+            hsl(180, 10%, 60%) 3.8%,
+            hsl(180, 29%, 66%) 4.5%,
+            hsl(180, 10%, 60%) 5.2%,
+            #0e152e 10%,
+            #0e152e 12%
+        ),
+        radial-gradient(
+            farthest-corner circle at var(--pointer-x) var(--pointer-y),
+            hsla(0, 0%, 0%, 0.1) 12%,
+            hsla(0, 0%, 0%, 0.15) 20%,
+            hsla(0, 0%, 0%, 0.25) 120%
+        );
+    background-blend-mode: screen, hue, hard-light;
+    background-size: var(--imgsize) 100%, 200% 700%, 300% 100%, 200% 100%;
+    background-position: center, 0% var(--background-y), var(--background-x) var(--background-y), var(--background-x) var(--background-y);
+    filter: brightness(0.7) contrast(2) saturate(0.5);
+}
+
+.card-holo-rotator--v .card-holo-shine::after {
+    content: "";
+    background-position: center, 0% var(--background-y), calc(var(--background-x) * -1) calc(var(--background-y) * -1), var(--background-x) var(--background-y);
+    background-size: var(--imgsize) 100%, 200% 400%, 195% 100%, 200% 100%;
+    filter: brightness(1) contrast(2.5) saturate(1.75);
+    mix-blend-mode: soft-light;
+}
+
+.card-holo-rotator--v .card-holo-glare {
+    background-image: radial-gradient(
+        farthest-corner circle at var(--pointer-x) var(--pointer-y),
+        hsl(0, 0%, 100%) 0%,
+        hsla(210, 3%, 54%, 0.33) 45%,
+        hsla(0, 0%, 20%, 0.9) 130%
+    );
+    opacity: calc(var(--card-opacity) * 0.5);
+    mix-blend-mode: hard-light;
+    filter: brightness(0.9) contrast(1.75);
+}
+
+/* VMAX -- ported from v-max.css: vmax foil texture difference-blended
+   under a -33deg color ramp and the metallic stripes; ::after lightens
+   with the vertical sunpillar ramp. */
+.card-holo-rotator--vmax .card-holo-shine {
+    --space: 6%;
+    background-image:
+        var(--foil-vmax),
+        repeating-linear-gradient(
+            -33deg,
+            hsl(2, 70%, 47%) calc(var(--space) * 1),
+            hsl(228, 60%, 64%) calc(var(--space) * 2),
+            hsl(176, 55%, 39%) calc(var(--space) * 3),
+            hsl(123, 68%, 35%) calc(var(--space) * 4),
+            hsl(283, 75%, 57%) calc(var(--space) * 5),
+            hsl(2, 70%, 47%) calc(var(--space) * 6)
+        ),
+        repeating-linear-gradient(
+            var(--angle),
+            hsla(227, 53%, 12%, 0.5) 0%,
+            hsl(180, 10%, 50%) 2.5%,
+            hsl(83, 50%, 35%) 5%,
+            hsl(180, 10%, 50%) 7.5%,
+            hsla(227, 53%, 12%, 0.5) 10%,
+            hsla(227, 53%, 12%, 0.5) 15%
+        ),
+        radial-gradient(
+            farthest-corner circle at var(--pointer-x) var(--pointer-y),
+            hsla(189, 76%, 77%, 0.6) 0%,
+            hsla(147, 59%, 77%, 0.6) 25%,
+            hsla(271, 55%, 69%, 0.6) 50%,
+            hsla(355, 56%, 72%, 0.6) 75%
+        );
+    background-blend-mode: difference, luminosity, soft-light;
+    background-size: 60% 30%, 1100% 1100%, 600% 600%, 200% 200%;
+    background-position: center, var(--background-x) var(--background-y), var(--background-x) var(--background-y), var(--background-x) var(--background-y);
+    filter: brightness(calc((var(--pointer-from-center) * 0.4) + 0.4)) contrast(2) saturate(1);
+}
+
+.card-holo-rotator--vmax .card-holo-shine::after {
+    content: "";
+    background-image:
+        repeating-linear-gradient(
+            0deg,
+            var(--sunpillar-clr-1) calc(var(--space) * 1),
+            var(--sunpillar-clr-2) calc(var(--space) * 2),
+            var(--sunpillar-clr-3) calc(var(--space) * 3),
+            var(--sunpillar-clr-4) calc(var(--space) * 4),
+            var(--sunpillar-clr-5) calc(var(--space) * 5),
+            var(--sunpillar-clr-6) calc(var(--space) * 6),
+            var(--sunpillar-clr-1) calc(var(--space) * 7)
+        ),
+        repeating-linear-gradient(
+            var(--angle),
+            #0e152e 0%,
+            hsl(180, 10%, 60%) 3.8%,
+            hsl(180, 29%, 66%) 4.5%,
+            hsl(180, 10%, 60%) 5.2%,
+            #0e152e 10%,
+            #0e152e 12%
+        );
+    background-blend-mode: hue, hard-light;
+    background-size: 200% 700%, 300% 100%, 200% 100%;
+    background-position: 0% var(--background-y), var(--background-x) var(--background-y), var(--background-x) var(--background-y);
+    mix-blend-mode: lighten;
+    opacity: calc((0.3 * var(--card-opacity)) + var(--card-opacity) * var(--pointer-from-center) * 0.5);
+    filter: saturate(1.5);
+}
+
+.card-holo-rotator--vmax .card-holo-glare {
+    mix-blend-mode: hard-light;
+    filter: brightness(1) contrast(1);
+    background-image: radial-gradient(
+        farthest-corner circle at var(--pointer-x) var(--pointer-y),
+        hsla(0, 0%, 100%, 0.75) 0%,
+        hsl(0, 0%, 0%) 120%
+    );
+    opacity: calc((0.2 * var(--card-opacity)) + var(--card-opacity) * var(--pointer-from-center) * 0.8);
+}
+
+/* RAINBOW / SECRET / HYPER -- ported from rainbow-holo.css ("rare
+   rainbow"): muted rainbow ramps luminosity/soft-light blended through the
+   glitter tile, ::after color-dodges a second glitter+ramp pass, ::before
+   darkens with the illusion foil texture. */
+.card-holo-rotator--rainbow .card-holo-shine {
+    --r-clr-1: hsl(0, 57%, 37%);
+    --r-clr-2: hsl(40, 53%, 39%);
+    --r-clr-3: hsl(90, 60%, 35%);
+    --r-clr-4: hsl(180, 60%, 35%);
+    --r-clr-5: hsl(180, 60%, 35%);
+    --r-clr-6: hsl(210, 57%, 39%);
+    --r-clr-7: hsl(280, 55%, 31%);
+
+    background-image:
+        linear-gradient(-45deg, var(--r-clr-1), var(--r-clr-5)),
+        var(--glitter),
+        linear-gradient(
+            -30deg,
+            var(--r-clr-1), var(--r-clr-2), var(--r-clr-3), var(--r-clr-4), var(--r-clr-5), var(--r-clr-6), var(--r-clr-7),
+            var(--r-clr-1), var(--r-clr-2), var(--r-clr-3), var(--r-clr-4), var(--r-clr-5), var(--r-clr-6), var(--r-clr-7),
+            var(--r-clr-1), var(--r-clr-2), var(--r-clr-3), var(--r-clr-4), var(--r-clr-5), var(--r-clr-6), var(--r-clr-7),
+            var(--r-clr-1)
+        );
+    background-blend-mode: luminosity, soft-light;
+    background-size: 200% 200%, var(--glittersize) var(--glittersize), 400% 400%;
+    background-position:
+        calc(25% + (50% * var(--pointer-from-left))) calc(25% + (50% * var(--pointer-from-top))),
+        center center,
+        calc(25% + (var(--pointer-x) / 2)) calc(25% + (var(--pointer-y) / 2));
+    filter: brightness(calc((var(--pointer-from-center) * 0.25) + 0.6)) contrast(2.2) saturate(0.75);
+}
+
+.card-holo-rotator--rainbow .card-holo-shine::after {
+    content: "";
+    background-image:
+        var(--glitter),
+        linear-gradient(
+            -60deg,
+            var(--r-clr-1), var(--r-clr-2), var(--r-clr-3), var(--r-clr-4), var(--r-clr-5), var(--r-clr-6), var(--r-clr-7),
+            var(--r-clr-1), var(--r-clr-2), var(--r-clr-3), var(--r-clr-4), var(--r-clr-5), var(--r-clr-6), var(--r-clr-7),
+            var(--r-clr-1), var(--r-clr-2), var(--r-clr-3), var(--r-clr-4), var(--r-clr-5), var(--r-clr-6), var(--r-clr-7),
+            var(--r-clr-1)
+        );
+    background-blend-mode: soft-light;
+    background-size: var(--glittersize) var(--glittersize), 400% 400%;
+    background-position: center center, var(--pointer-x) var(--pointer-y);
+    filter: brightness(calc((var(--pointer-from-center) * 0.3) + 0.55)) contrast(2) saturate(1);
+    mix-blend-mode: color-dodge;
+}
+
+.card-holo-rotator--rainbow .card-holo-shine::before {
+    content: "";
+    background-image: var(--foil-illusion);
+    background-size: 33%;
+    background-position: center center;
+    filter: brightness(2.5) contrast(1);
+    opacity: calc((var(--pointer-from-center) + 0.4) * 0.6);
+    mix-blend-mode: darken;
+}
+
+.card-holo-rotator--rainbow .card-holo-glare {
+    background-image: radial-gradient(
+        farthest-corner circle at var(--pointer-x) var(--pointer-y),
+        hsl(0, 0%, 80%),
+        hsla(187, 10%, 85%, 0.25) 30%,
+        hsl(197, 6%, 25%) 120%
+    );
+    filter: brightness(0.9) contrast(1.75);
+    opacity: calc(var(--pointer-from-center) * 0.9);
+    mix-blend-mode: hard-light;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .card-holo-shine,
+    .card-holo-glare {
+        display: none;
+    }
+}

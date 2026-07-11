@@ -5,6 +5,20 @@ import UsernamePrompt from './UsernamePrompt'
 import BinderPage from './BinderPage'
 import { cacheProfile, readProfile } from './offlineCache'
 
+// supabase-js throws instead of returning an error when getSession() tries a
+// background token refresh and the network is down. Read its own persisted
+// session straight from storage as a fallback so a stale-but-offline session
+// still lets the app render instead of bouncing to the login screen.
+function readStoredSession() {
+  const key = Object.keys(localStorage).find((k) => k.startsWith('sb-') && k.endsWith('-auth-token'))
+  if (!key) return null
+  try {
+    return JSON.parse(localStorage.getItem(key))
+  } catch {
+    return null
+  }
+}
+
 export default function App() {
   const [session, setSession] = useState(undefined) // undefined = still loading
   const [profile, setProfile] = useState(undefined) // undefined = fetching, null = no profile
@@ -75,7 +89,16 @@ export default function App() {
       }
     }).catch(err => {
       console.error('Failed to fetch session:', err)
-      setSession(null)
+      // Likely a failed background refresh while offline, not an actual
+      // sign-out -- fall back to the last persisted session rather than
+      // logging the user out just because they lost the network.
+      const stored = readStoredSession()
+      setSession(stored)
+      if (stored) {
+        lastUserId = stored.user.id
+        setProfile(undefined)
+        fetchProfile(stored.user.id)
+      }
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {

@@ -16,8 +16,10 @@ export function uniqueImageUrls(slots) {
 }
 
 // Walk every binder's slots once, cache them per page, and warm the service
-// worker's image cache so the whole collection is viewable offline. Best-effort
-// and fire-and-forget; getBinders/getAllBinderSlots already log their own errors.
+// worker's image cache so the whole collection is viewable offline. Best-effort;
+// getBinders/getAllBinderSlots already log their own errors. The returned
+// promise resolves once every image has actually been fetched (or failed), so
+// callers can use it as an "offline-ready" signal.
 export async function syncAllForOffline(userId) {
   const binders = await getBinders(userId)
   for (const binder of binders) {
@@ -25,8 +27,6 @@ export async function syncAllForOffline(userId) {
     for (const [page, pageSlots] of groupSlotsByPage(slots)) {
       cacheSlots(binder.id, page, pageSlots)
     }
-    for (const url of uniqueImageUrls(slots)) {
-      fetch(url).catch(() => {}) // warm the image cache; ignore failures
-    }
+    await Promise.all(uniqueImageUrls(slots).map((url) => fetch(url).catch(() => {})))
   }
 }

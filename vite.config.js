@@ -11,6 +11,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
       manifest: false, // browser-only: no installable app for now
+      devOptions: { enabled: true }, // SW is off by default under `vite dev` -- needed to test offline locally
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,webp,svg,woff,woff2}'],
         runtimeCaching: [

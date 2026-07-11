@@ -52,7 +52,9 @@ export default function CardSearchOverlay({ onSelect, onClose }) {
       setResults(data.filter((card) => card.image))
     } catch (err) {
       console.error('Card search error:', err)
-      setError("Couldn't load results")
+      setError(navigator.onLine
+        ? "Couldn't load results"
+        : "No internet — you can't add cards right now. Find in Binder still works offline.")
       setResults([])
     } finally {
       setLoading(false)

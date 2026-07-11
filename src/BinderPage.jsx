@@ -11,11 +11,13 @@ import BinderStatsOverlay from './BinderStatsOverlay'
 import BinderDeleteOverlay from './BinderDeleteOverlay'
 import ShareOverlay from './ShareOverlay'
 import SetCompletionOverlay from './SetCompletionOverlay'
+import OfflineReadyOverlay from './OfflineReadyOverlay'
 import notebookBg from './assets/binder-notebook.png'
 import { TIDE_BG } from './pixelArt'
 import { navButtonClass, navButtonStyle, dangerButtonStyle } from './navButton'
 import { planMove } from './cards'
 import { syncAllForOffline } from './offlineSync'
+import { readSlots } from './offlineCache'
 import './styles.css'
 
 const t = theme
@@ -57,6 +59,8 @@ export default function BinderPage({ userId }) {
   const [viewingSlot, setViewingSlot] = useState(null) // { pageNumber, slotNumber, cardId, variant, cardImage, cardName } | null
   const [heldCard, setHeldCard] = useState(null) // { srcPage, srcSlot, card } | null, a card picked up to move
   const [actionError, setActionError] = useState(null)
+  const [offlineReady, setOfflineReady] = useState(false)
+  const [offlineInfoOpen, setOfflineInfoOpen] = useState(false)
   const loadSeq = useRef(0)
 
   const reloadPages = useCallback(async () => {
@@ -64,6 +68,14 @@ export default function BinderPage({ userId }) {
     // Sequence guard: a slower, older fetch pair must not overwrite the
     // slots of the page the user has since navigated to.
     const seq = ++loadSeq.current
+    // Cache-first: show the last-synced spread instantly so page flips never
+    // wait on a slow network; the live fetch below replaces it when it lands.
+    const cachedLeft = readSlots(binderId, activePage)
+    const cachedRight = readSlots(binderId, activePage + 1)
+    if (cachedLeft || cachedRight) {
+      setLeftSlots(cachedLeft ?? [])
+      setRightSlots(cachedRight ?? [])
+    }
     const [left, right] = await Promise.all([
       fetchPage(activePage),
       fetchPage(activePage + 1),
@@ -82,8 +94,14 @@ export default function BinderPage({ userId }) {
   }, [activePage])
 
   // Once per mount, when online, cache the whole collection for offline viewing.
+  // offlineReady flips once every card image has actually been fetched, so it's
+  // safe to tell the user they can go offline and still scroll/search.
   useEffect(() => {
-    if (navigator.onLine) syncAllForOffline(userId)
+    if (!navigator.onLine) return
+    let cancelled = false
+    setOfflineReady(false)
+    syncAllForOffline(userId).then(() => { if (!cancelled) setOfflineReady(true) })
+    return () => { cancelled = true }
   }, [userId])
 
   useEffect(() => {
@@ -291,8 +309,18 @@ export default function BinderPage({ userId }) {
           </button>
         </div>
 
-        <span className="justify-self-center text-2xl font-semibold text-white">
+        <span className="relative justify-self-center text-2xl font-semibold text-white">
           {binderName}
+          {offlineReady && (
+            <button
+              type="button"
+              onClick={() => setOfflineInfoOpen(true)}
+              className="absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap text-xs font-normal text-green-400"
+              title="Every card in your collection is cached -- safe to go offline"
+            >
+              Offline ready
+            </button>
+          )}
         </span>
 
         <div className="flex items-center justify-self-end gap-2">
@@ -302,7 +330,7 @@ export default function BinderPage({ userId }) {
             className={navButtonClass}
             style={navButtonStyle}
           >
-            Search Cards
+            Add Cards
           </button>
 
           <div className="relative">
@@ -528,6 +556,8 @@ export default function BinderPage({ userId }) {
           onClose={() => setDeleteOpen(false)}
         />
       )}
+
+      {offlineInfoOpen && <OfflineReadyOverlay onClose={() => setOfflineInfoOpen(false)} />}
     </div>
   )
 }

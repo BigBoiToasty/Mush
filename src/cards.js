@@ -1,5 +1,14 @@
 import {supabase} from "./supabaseClient";
-import { cacheSlots, readSlots, cacheBinders, readBinders } from './offlineCache'
+import { cacheSlots, readSlots, readAllSlots, cacheBinders, readBinders } from './offlineCache'
+
+// Offline fallback for both find functions below: same case-insensitive
+// substring match Postgres's ilike does, ordered the same way (by page).
+function searchSlotsOffline(slots, query) {
+  const q = query.toLowerCase()
+  return slots
+    .filter((s) => s.card_name?.toLowerCase().includes(q))
+    .sort((a, b) => a.page_number - b.page_number)
+}
 
 //  LANGUAGE STUFF
 
@@ -109,7 +118,7 @@ export async function findCardsByName(binderId, query) {
 
   if (error) {
     console.error('Find cards error:', error)
-    throw error
+    return searchSlotsOffline(readAllSlots(binderId), query) // offline: search the last-synced cache
   }
 
   return data
@@ -127,12 +136,15 @@ export async function findCardsByNameAllBinders(userId, query) {
     .ilike('card_name', `%${escaped}%`)
     .order('page_number', { ascending: true })
 
+  const namesById = new Map(binders.map((b) => [b.id, b.name]))
+
   if (error) {
     console.error('Find cards across binders error:', error)
-    throw error
+    // offline: search each binder's last-synced cache
+    const slots = binders.flatMap((b) => readAllSlots(b.id))
+    return searchSlotsOffline(slots, query).map((slot) => ({ ...slot, binder_name: namesById.get(slot.binder_id) }))
   }
 
-  const namesById = new Map(binders.map((b) => [b.id, b.name]))
   return data.map((slot) => ({ ...slot, binder_name: namesById.get(slot.binder_id) }))
 }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { planMove, cardUrl, hasCJK, pickByExactName, groupOwnedCardsBySet, annotateSetCards, holoEffectFor } from './cards'
+import { planMove, cardUrl, hasCJK, pickByExactName, groupOwnedCardsBySet, annotateSetCards, holoEffectFor, slotsToCsv, csvToSlots } from './cards'
 
 describe('hasCJK', () => {
   it('detects Japanese and Chinese text', () => {
@@ -139,5 +139,61 @@ describe('holoEffectFor', () => {
     expect(holoEffectFor('wPromo', 'Uncommon')).toBe(null)
     expect(holoEffectFor(null, null)).toBe(null)
     expect(holoEffectFor(undefined, undefined)).toBe(null)
+  })
+})
+
+describe('slotsToCsv', () => {
+  it('sorts by page then slot and includes a header row', () => {
+    const slots = [
+      { page_number: 2, slot_number: 0, card_id: 'b', card_name: 'Mew', variant: 'holo', language: 'en', card_image: 'b.webp' },
+      { page_number: 1, slot_number: 4, card_id: 'a', card_name: 'Pikachu', variant: 'normal', language: 'ja', card_image: 'a.webp' },
+    ]
+    expect(slotsToCsv('My Binder', slots)).toBe(
+      'binder,page,slot,card_id,card_name,variant,language,card_image\n' +
+      'My Binder,1,4,a,Pikachu,normal,ja,a.webp\n' +
+      'My Binder,2,0,b,Mew,holo,en,b.webp',
+    )
+  })
+
+  it('quotes fields containing commas or quotes and blanks out nulls', () => {
+    const slots = [
+      { page_number: 1, slot_number: 0, card_id: 'x', card_name: 'Ho-oh, the "Rainbow"', variant: null, language: 'en', card_image: 'x.webp' },
+    ]
+    expect(slotsToCsv('a,b', slots)).toBe(
+      'binder,page,slot,card_id,card_name,variant,language,card_image\n' +
+      '"a,b",1,0,x,"Ho-oh, the ""Rainbow""",,en,x.webp',
+    )
+  })
+
+  it('is header-only for an empty binder', () => {
+    expect(slotsToCsv('Empty', [])).toBe('binder,page,slot,card_id,card_name,variant,language,card_image')
+  })
+})
+
+describe('csvToSlots', () => {
+  it('round-trips what slotsToCsv exports', () => {
+    const slots = [
+      { page_number: 1, slot_number: 4, card_id: 'a', card_name: 'Ho-oh, the "Rainbow"', variant: 'normal', language: 'ja', card_image: 'a.webp' },
+      { page_number: 2, slot_number: 0, card_id: 'b', card_name: 'Mew', variant: null, language: 'en', card_image: 'b.webp' },
+    ]
+    expect(csvToSlots(slotsToCsv('My, "Binder"', slots))).toEqual(slots)
+  })
+
+  it('accepts CRLF line endings and a trailing newline', () => {
+    const csv = 'binder,page,slot,card_id,card_name,variant,language,card_image\r\nB,1,0,x,Mew,,en,x.webp\r\n'
+    expect(csvToSlots(csv)).toEqual([
+      { page_number: 1, slot_number: 0, card_id: 'x', card_name: 'Mew', variant: null, language: 'en', card_image: 'x.webp' },
+    ])
+  })
+
+  it('rejects files missing required columns', () => {
+    expect(() => csvToSlots('name,qty\nMew,2')).toThrow(/Missing "page"/)
+  })
+
+  it('rejects rows with out-of-range pages or slots, naming the row', () => {
+    const header = 'binder,page,slot,card_id,card_name,variant,language,card_image\n'
+    expect(() => csvToSlots(header + 'B,0,0,x,Mew,,en,x.webp')).toThrow(/Row 2/)
+    expect(() => csvToSlots(header + 'B,1,9,x,Mew,,en,x.webp')).toThrow(/Row 2/)
+    expect(() => csvToSlots(header + 'B,1,0,,Mew,,en,x.webp')).toThrow(/Row 2/)
   })
 })

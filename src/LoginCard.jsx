@@ -61,6 +61,37 @@ const btnStyle = (pos) => ({
 
 const btnCls = 'absolute cursor-pointer leading-none hover:brightness-110'
 
+// Sableye show/hide toggle, positioned inside the right edge of the password
+// field whose top is given.
+function PwToggle({ shown, onToggle, fieldTop, label }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label={shown ? `Hide ${label}` : `Show ${label}`}
+      aria-pressed={shown}
+      title={shown ? `Hide ${label}` : `Show ${label}`}
+      style={{
+        position: 'absolute',
+        left: `calc(${t.layout.fieldX} + ${t.layout.fieldW} - 6%)`,
+        top: `calc(${fieldTop} + ${t.layout.fieldH} / 2)`,
+        transform: 'translateY(-50%)',
+        background: 'transparent',
+        border: 'none',
+        cursor: 'pointer',
+        padding: 0,
+        lineHeight: 0,
+      }}
+    >
+      <img
+        src={shown ? sableyeShow : sableyeHide}
+        alt=""
+        style={{ width: t.layout.pwToggleSize, height: 'auto', display: 'block', imageRendering: 'pixelated' }}
+      />
+    </button>
+  )
+}
+
 // One card face. Same art + fields for both modes; only the title, button labels,
 // and signup-only rows (Confirm Password, Create Account) differ.
 // interactive=false is used for the two stacked faces mid-flip (no input then).
@@ -139,30 +170,7 @@ function CardFace({
         style={{ ...pixelInput, left: t.layout.fieldX, top: t.layout.passwordTop, paddingRight: '8%' }}
         className="absolute"
       />
-      <button
-        type="button"
-        onClick={onTogglePw}
-        aria-label={showPw ? 'Hide password' : 'Show password'}
-        aria-pressed={showPw}
-        title={showPw ? 'Hide password' : 'Show password'}
-        style={{
-          position: 'absolute',
-          left: `calc(${t.layout.fieldX} + ${t.layout.fieldW} - 6%)`,
-          top: `calc(${t.layout.passwordTop} + ${t.layout.fieldH} / 2)`,
-          transform: 'translateY(-50%)',
-          background: 'transparent',
-          border: 'none',
-          cursor: 'pointer',
-          padding: 0,
-          lineHeight: 0,
-        }}
-      >
-        <img
-          src={showPw ? sableyeShow : sableyeHide}
-          alt=""
-          style={{ width: t.layout.pwToggleSize, height: 'auto', display: 'block', imageRendering: 'pixelated' }}
-        />
-      </button>
+      <PwToggle shown={showPw} onToggle={onTogglePw} fieldTop={t.layout.passwordTop} label="password" />
       {/* Flip button: "Sign Up →" in login, "← Login" in signup — always right of the password field */}
       <button
         type="button"
@@ -188,30 +196,7 @@ function CardFace({
             style={{ ...pixelInput, left: t.layout.fieldX, top: t.layout.confirmPwTop, paddingRight: '8%' }}
             className="absolute"
           />
-          <button
-            type="button"
-            onClick={onToggleConfirmPw}
-            aria-label={showConfirmPw ? 'Hide confirm password' : 'Show confirm password'}
-            aria-pressed={showConfirmPw}
-            title={showConfirmPw ? 'Hide confirm password' : 'Show confirm password'}
-            style={{
-              position: 'absolute',
-              left: `calc(${t.layout.fieldX} + ${t.layout.fieldW} - 6%)`,
-              top: `calc(${t.layout.confirmPwTop} + ${t.layout.fieldH} / 2)`,
-              transform: 'translateY(-50%)',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: 0,
-              lineHeight: 0,
-            }}
-          >
-            <img
-              src={showConfirmPw ? sableyeShow : sableyeHide}
-              alt=""
-              style={{ width: t.layout.pwToggleSize, height: 'auto', display: 'block', imageRendering: 'pixelated' }}
-            />
-          </button>
+          <PwToggle shown={showConfirmPw} onToggle={onToggleConfirmPw} fieldTop={t.layout.confirmPwTop} label="confirm password" />
           <button
             type="button"
             disabled={loading}
@@ -224,22 +209,18 @@ function CardFace({
         </>
       )}
 
-      {/* Login-only: submit + forgot */}
+      {/* Login-only: submit. No "Forgot Password" -- accounts use synthetic
+          @mush.app emails, so there's no address to send a reset to. */}
       {!isSignup && (
-        <>
-          <button
-            type="button"
-            disabled={loading}
-            onClick={() => onLogin(username, password)}
-            style={btnStyle(t.layout.buttons.login)}
-            className={btnCls}
-          >
-            {loading ? '...' : copy.primary}
-          </button>
-          <button type="button" style={btnStyle(t.layout.buttons.forgot)} className={btnCls}>
-            Forgot Password
-          </button>
-        </>
+        <button
+          type="button"
+          disabled={loading}
+          onClick={() => onLogin(username, password)}
+          style={btnStyle(t.layout.buttons.login)}
+          className={btnCls}
+        >
+          {loading ? '...' : copy.primary}
+        </button>
       )}
       {authError && (
         <p style={{

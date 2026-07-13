@@ -1,23 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
-import { theme } from './theme'
 import BinderGrid from './BinderGrid'
 import CardDetailPopup from './CardDetailPopup'
 import notebookBg from './assets/binder-notebook.png'
-import { TIDE_BG } from './pixelArt'
-import { navButtonClass, navButtonStyle } from './navButton'
+import { fontBase, pageBg, NavBtn, PageNav, spreadStartForPage, usePageSwipe, useDismiss } from './ui'
+import { cacheShared, readShared } from './offlineCache'
 import { getSharedBinder, getSharedBinderSlots, searchSharedBinder } from './cards'
 import './styles.css'
-
-const t = theme
-const fontBase = { fontFamily: t.font.family, letterSpacing: t.font.letterSpacing }
-const pageBg = { background: TIDE_BG, backgroundSize: 'cover', imageRendering: 'pixelated' }
-
-// ponytail: localStorage cache lets a shared binder still render after the
-// first successful load even if the network is gone; no service worker
-// changes needed since these RPC calls are POSTs workbox won't cache anyway.
-function cacheKey(token, suffix) {
-  return `shared-binder:${token}:${suffix}`
-}
 
 export default function SharedBinderView({ token }) {
   const [binder, setBinder] = useState(undefined) // undefined = loading, null = not found
@@ -30,8 +18,10 @@ export default function SharedBinderView({ token }) {
   const [results, setResults] = useState([])
   const [searching, setSearching] = useState(false)
   const [searchError, setSearchError] = useState(null)
-  const [editingPage, setEditingPage] = useState(false)
-  const [pageJumpInput, setPageJumpInput] = useState('')
+  // Registered for the page's lifetime (the search overlay is inline JSX, not
+  // its own component); dismissing while closed is a no-op.
+  const onSearchBackdropClick = useDismiss(() => setSearchOpen(false))
+  const swipeHandlers = usePageSwipe(setActivePage)
 
   useEffect(() => {
     let cancelled = false
@@ -39,12 +29,11 @@ export default function SharedBinderView({ token }) {
       .then((result) => {
         if (cancelled) return
         setBinder(result)
-        if (result) localStorage.setItem(cacheKey(token, 'binder'), JSON.stringify(result))
+        if (result) cacheShared(token, 'binder', result)
       })
       .catch(() => {
-        if (cancelled) return
-        const cached = localStorage.getItem(cacheKey(token, 'binder'))
-        setBinder(cached ? JSON.parse(cached) : null)
+        // offline: fall back to the last successfully loaded copy
+        if (!cancelled) setBinder(readShared(token, 'binder'))
       })
     return () => { cancelled = true }
   }, [token])
@@ -57,13 +46,11 @@ export default function SharedBinderView({ token }) {
       ])
       setLeftSlots(left)
       setRightSlots(right)
-      localStorage.setItem(cacheKey(token, `page:${activePage}`), JSON.stringify(left))
-      localStorage.setItem(cacheKey(token, `page:${activePage + 1}`), JSON.stringify(right))
+      cacheShared(token, `page:${activePage}`, left)
+      cacheShared(token, `page:${activePage + 1}`, right)
     } catch {
-      const cachedLeft = localStorage.getItem(cacheKey(token, `page:${activePage}`))
-      const cachedRight = localStorage.getItem(cacheKey(token, `page:${activePage + 1}`))
-      setLeftSlots(cachedLeft ? JSON.parse(cachedLeft) : [])
-      setRightSlots(cachedRight ? JSON.parse(cachedRight) : [])
+      setLeftSlots(readShared(token, `page:${activePage}`) ?? [])
+      setRightSlots(readShared(token, `page:${activePage + 1}`) ?? [])
     }
   }, [token, activePage])
 
@@ -92,27 +79,8 @@ export default function SharedBinderView({ token }) {
   }
 
   function handleSelectResult(pageNumber) {
-    setActivePage(pageNumber % 2 === 1 ? pageNumber : pageNumber - 1)
+    setActivePage(spreadStartForPage(pageNumber))
     setSearchOpen(false)
-  }
-
-  function handleStartEditPage() {
-    setPageJumpInput(String(displayedPage))
-    setEditingPage(true)
-  }
-
-  function handleCancelEditPage() {
-    setEditingPage(false)
-    setPageJumpInput('')
-  }
-
-  function handlePageJump(e) {
-    e.preventDefault()
-    const target = Number(pageJumpInput)
-    if (!Number.isInteger(target) || target < 1) return
-    setActivePage(target * 2 - 1)
-    setEditingPage(false)
-    setPageJumpInput('')
   }
 
   if (binder === undefined) return null
@@ -124,13 +92,11 @@ export default function SharedBinderView({ token }) {
     )
   }
 
-  const displayedPage = (activePage + 1) / 2
-
   return (
     <div className="flex h-screen flex-col items-center gap-4 overflow-hidden p-4" style={{ ...fontBase, ...pageBg }}>
       <span className="text-base font-semibold text-white">{binder.name}</span>
 
-      <div className="binder-scale-wrap">
+      <div className="binder-scale-wrap" {...swipeHandlers}>
         <div id="binderView">
           <img src={notebookBg} alt="" className="binder-notebook-bg" aria-hidden="true" />
           <div className="binder-page-left">
@@ -142,48 +108,12 @@ export default function SharedBinderView({ token }) {
         </div>
       </div>
 
-      {editingPage ? (
-        <form onSubmit={handlePageJump} className="flex shrink-0 items-center gap-4">
-          <button type="button" onClick={handleCancelEditPage} className={navButtonClass} style={navButtonStyle}>
-            Back
-          </button>
-          <input
-            type="number"
-            min="1"
-            autoFocus
-            value={pageJumpInput}
-            onChange={(e) => setPageJumpInput(e.target.value)}
-            className="w-20 rounded border border-gray-400 px-2 py-1 text-base"
-          />
-          <button type="submit" className={navButtonClass} style={navButtonStyle}>
-            Go
-          </button>
-        </form>
-      ) : (
-        <div className="flex shrink-0 items-center gap-4">
-          <button
-            type="button"
-            onClick={() => setActivePage((p) => Math.max(1, p - 2))}
-            disabled={activePage <= 1}
-            className={navButtonClass}
-            style={navButtonStyle}
-          >
-            Prev
-          </button>
-          <button type="button" onClick={handleStartEditPage} className={navButtonClass} style={navButtonStyle}>
-            Page {displayedPage}
-          </button>
-          <button type="button" onClick={() => setActivePage((p) => p + 2)} className={navButtonClass} style={navButtonStyle}>
-            Next
-          </button>
-          <button type="button" onClick={() => setSearchOpen(true)} className={navButtonClass} style={navButtonStyle}>
-            Search
-          </button>
-        </div>
-      )}
+      <PageNav activePage={activePage} setActivePage={setActivePage}>
+        <NavBtn onClick={() => setSearchOpen(true)}>Search</NavBtn>
+      </PageNav>
 
       {searchOpen && (
-        <div className="card-search-overlay">
+        <div className="card-search-overlay" onClick={onSearchBackdropClick}>
           <form onSubmit={handleSearch} className="card-search-bar flex flex-col gap-2">
             <div className="flex gap-2">
               <input
@@ -193,12 +123,8 @@ export default function SharedBinderView({ token }) {
                 placeholder="Find a card..."
                 className="rounded border border-gray-400 px-3 py-2 text-base"
               />
-              <button type="submit" disabled={searching} className={navButtonClass} style={navButtonStyle}>
-                {searching ? '...' : 'Find'}
-              </button>
-              <button type="button" onClick={() => setSearchOpen(false)} className={navButtonClass} style={navButtonStyle}>
-                Close
-              </button>
+              <NavBtn type="submit" disabled={searching}>{searching ? '...' : 'Find'}</NavBtn>
+              <NavBtn onClick={() => setSearchOpen(false)}>Close</NavBtn>
             </div>
           </form>
           {searchError && <p className="card-search-error">{searchError}</p>}

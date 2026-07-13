@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
-import { navButtonClass, navButtonStyle } from './navButton'
+import { OverlayPanel, NavBtn } from './ui'
 
 export default function ShareOverlay({ getShareToken, setShareToken, onClose }) {
+  // null is a valid loaded value (sharing off), so track loading separately
+  // instead of using useAsync's data-is-null-while-loading convention.
   const [token, setToken] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -39,35 +41,26 @@ export default function ShareOverlay({ getShareToken, setShareToken, onClose }) 
   const link = token ? `${window.location.origin}${window.location.pathname}?share=${token}` : null
 
   return (
-    <div className="card-search-overlay">
-      <div className="card-search-bar flex flex-col gap-3" style={{ minWidth: 280 }}>
-        <div className="flex items-center justify-between gap-4">
-          <span className="text-base font-semibold">Share Binder</span>
-          <button type="button" onClick={onClose} className={navButtonClass} style={navButtonStyle}>
-            Close
-          </button>
+    <OverlayPanel title="Share Binder" onClose={onClose} panelStyle={{ minWidth: 280 }}>
+      {loading && <p>Loading...</p>}
+      {error && <p className="card-search-error">{error}</p>}
+
+      {!loading && (
+        <div className="flex flex-col gap-2">
+          {link && (
+            <input
+              type="text"
+              readOnly
+              value={link}
+              onFocus={(e) => e.target.select()}
+              className="w-full rounded border border-gray-400 px-2 py-1 text-base"
+            />
+          )}
+          <NavBtn disabled={toggling} onClick={handleToggle}>
+            {toggling ? '...' : token ? 'Turn Off Sharing' : 'Turn On Sharing'}
+          </NavBtn>
         </div>
-
-        {loading && <p>Loading...</p>}
-        {error && <p className="card-search-error">{error}</p>}
-
-        {!loading && (
-          <div className="flex flex-col gap-2">
-            {link && (
-              <input
-                type="text"
-                readOnly
-                value={link}
-                onFocus={(e) => e.target.select()}
-                className="w-full rounded border border-gray-400 px-2 py-1 text-base"
-              />
-            )}
-            <button type="button" disabled={toggling} onClick={handleToggle} className={navButtonClass} style={navButtonStyle}>
-              {toggling ? '...' : token ? 'Turn Off Sharing' : 'Turn On Sharing'}
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
+      )}
+    </OverlayPanel>
   )
 }

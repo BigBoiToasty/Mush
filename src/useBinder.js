@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getBinders, createBinders, deleteBinders, getCards, saveCards, deleteCard, findCardsByName, findCardsByNameAllBinders, backfillCardNames, getBinderCounts, getBinderWorth, getBinderShareToken, setBinderShareToken, getSetCompletion, getSetCards } from './cards'
+import { getBinders, createBinders, renameBinders, deleteBinders, getCards, saveCards, deleteCard, findCardsByName, findCardsByNameAllBinders, backfillCardNames, getBinderCounts, getBinderWorth, getBinderShareToken, setBinderShareToken, getSetCompletion, getSetCards } from './cards'
+import { writeOrQueue } from './offlineQueue'
 
 // Shares one in-flight lookup-or-create promise per userId, so two concurrent
 // effect instances (e.g. React StrictMode's double-invoke) can't both see zero
@@ -58,9 +59,11 @@ export function useBinder(userId) {
     return getCards(binderId, pageNumber)
   }, [binderId])
 
+  // Writes queue for later instead of failing when the network is down (see
+  // offlineQueue); a thrown error here means a real server-side failure.
   const placeCard = useCallback(async (pageNumber, slotNumber, card) => {
     if (!binderId) return
-    await saveCards({
+    const slot = {
       binder_id: binderId,
       page_number: pageNumber,
       slot_number: slotNumber,
@@ -69,12 +72,16 @@ export function useBinder(userId) {
       variant: card.variant ?? null,
       card_name: card.cardName ?? null,
       language: card.language ?? 'en',
-    })
+    }
+    await writeOrQueue({ type: 'place', slot }, () => saveCards(slot))
   }, [binderId])
 
   const removeCard = useCallback(async (pageNumber, slotNumber) => {
     if (!binderId) return
-    await deleteCard(binderId, pageNumber, slotNumber)
+    await writeOrQueue(
+      { type: 'remove', binder_id: binderId, page_number: pageNumber, slot_number: slotNumber },
+      () => deleteCard(binderId, pageNumber, slotNumber),
+    )
   }, [binderId])
 
   const findInBinder = useCallback(async (query) => {
@@ -103,6 +110,11 @@ export function useBinder(userId) {
     return created
   }, [userId])
 
+  const renameBinder = useCallback(async (id, name) => {
+    await renameBinders(id, name)
+    if (id === binderId) setBinderName(name)
+  }, [binderId])
+
   const deleteBinder = useCallback((id) => deleteBinders(id), [])
 
   const getCounts = useCallback(() => getBinderCounts(binderId), [binderId])
@@ -113,7 +125,7 @@ export function useBinder(userId) {
 
   return {
     binderId, binderName, loading, error, fetchPage, placeCard, removeCard, findInBinder, findInAllBinders,
-    listBinders, switchBinder, createBinder, deleteBinder, getCounts, getWorth,
+    listBinders, switchBinder, createBinder, renameBinder, deleteBinder, getCounts, getWorth,
     getShareToken, setShareToken, getCompletion, getSetCards,
   }
 }

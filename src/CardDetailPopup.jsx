@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { navButtonClass, navButtonStyle, dangerButtonStyle } from './navButton'
+import { NavBtn, useDismiss } from './ui'
 import { pickTcgplayerEntry, cardUrl } from './cards'
 import HoloTilt from './HoloTilt'
 
@@ -27,11 +27,22 @@ function defaultVariant(card) {
   return VARIANT_ORDER.find((key) => keys.includes(key)) ?? null
 }
 
+// Shrinks with viewport width so 4 action buttons (Save Variant, Move, Remove
+// from Binder, Close) fit on one row instead of wrapping. The upper bound
+// (hit once the panel is at its 640px max-width, i.e. viewport >~680px) is
+// tuned to what actually fits -- vw alone would keep growing past that.
+const actionButtonStyle = {
+  padding: 'clamp(0.25rem, 1.4vw, 0.55rem) clamp(0.4rem, 2.2vw, 0.9rem)',
+  fontSize: 'clamp(0.68rem, 2.2vw, 0.95rem)',
+  whiteSpace: 'nowrap',
+}
+
 export default function CardDetailPopup({ cardId, actions, onClose, ownedVariant, language = 'en' }) {
   const [card, setCard] = useState(null)
   const [error, setError] = useState(null)
   const [selectedVariant, setSelectedVariant] = useState(null)
   const [zoomed, setZoomed] = useState(false)
+  const onBackdropClick = useDismiss(onClose)
 
   useEffect(() => {
     let cancelled = false
@@ -45,7 +56,9 @@ export default function CardDetailPopup({ cardId, actions, onClose, ownedVariant
       .then((data) => {
         if (!cancelled) {
           setCard(data)
-          setSelectedVariant(defaultVariant(data))
+          // View mode starts the picker on whatever's already owned so
+          // "change variant" doesn't silently reset it to the default first.
+          setSelectedVariant(ownedVariant ?? defaultVariant(data))
         }
       })
       .catch((err) => {
@@ -58,18 +71,18 @@ export default function CardDetailPopup({ cardId, actions, onClose, ownedVariant
   }, [cardId, language])
 
   const variantKeys = trueVariantKeys(card)
-  // In view mode ownedVariant is always passed (possibly null for a legacy
-  // row); in add mode it's absent, so the picker's selectedVariant drives it.
-  const effectiveVariant = ownedVariant !== undefined ? ownedVariant : selectedVariant
-  const tcgplayerEntry = card && pickTcgplayerEntry(card.pricing?.tcgplayer, effectiveVariant)
+  // selectedVariant is seeded from ownedVariant (view mode) or the picker's
+  // default (add mode), so it always reflects what's currently chosen --
+  // including live picker changes when editing an already-placed card.
+  const tcgplayerEntry = card && pickTcgplayerEntry(card.pricing?.tcgplayer, selectedVariant)
   return (
-    <div className="card-detail-overlay">
+    <div className="card-detail-overlay" onClick={onBackdropClick}>
       <div className="card-detail-panel">
         {error && <p className="card-search-error">{error}</p>}
         {!error && !card && <p>Loading...</p>}
         {card && (
           <>
-            <HoloTilt variant={effectiveVariant} rarity={card.rarity ?? null}>
+            <HoloTilt variant={selectedVariant} rarity={card.rarity ?? null}>
               <img
                 className={`card-detail-image${zoomed ? ' card-detail-image--zoomed' : ''}`}
                 src={`${card.image}/high.webp`}
@@ -95,12 +108,10 @@ export default function CardDetailPopup({ cardId, actions, onClose, ownedVariant
                 {variantKeys.length > 0 && (
                   <p>Print variants: {variantKeys.map((key) => VARIANT_LABELS[key] || key).join(', ')}</p>
                 )}
-                {ownedVariant && <p>Your copy: {VARIANT_LABELS[ownedVariant] || ownedVariant}</p>}
-                {/* Picker only in "add" mode (prop absent). In "view" mode the
-                    prop is always passed — null just means a legacy row whose
-                    variant was never recorded, and the remove action ignores
-                    any selection, so a picker there would be a dead control. */}
-                {ownedVariant === undefined && variantKeys.length > 1 && (
+                {/* Shown in both modes: "add" picks the variant to place, "view"
+                    lets you correct/change the variant of a card already placed
+                    (selectedVariant starts at ownedVariant, see fetch effect). */}
+                {variantKeys.length > 1 && (
                   <div className="card-detail-variant-picker">
                     {variantKeys.map((key) => (
                       <label key={key}>
@@ -126,21 +137,16 @@ export default function CardDetailPopup({ cardId, actions, onClose, ownedVariant
         )}
         <div className="card-detail-actions">
           {/* Actions hidden until the card loads so a click can't fire with
-              selectedVariant still null. */}
-          {card && actions?.map((a) => (
-            <button
-              key={a.label}
-              type="button"
-              onClick={() => a.onClick(selectedVariant)}
-              className={navButtonClass}
-              style={a.danger ? dangerButtonStyle : navButtonStyle}
-            >
+              selectedVariant still null. requiresVariantChoice actions (e.g.
+              Save Variant) only make sense when there's more than one print
+              variant to choose between. Padding/font shrink with viewport
+              width so all buttons stay on one row instead of wrapping. */}
+          {card && actions?.filter((a) => !a.requiresVariantChoice || variantKeys.length > 1).map((a) => (
+            <NavBtn key={a.label} danger={a.danger} onClick={() => a.onClick(selectedVariant)} style={actionButtonStyle}>
               {a.label}
-            </button>
+            </NavBtn>
           ))}
-          <button type="button" onClick={onClose} className={navButtonClass} style={navButtonStyle}>
-            Close
-          </button>
+          <NavBtn onClick={onClose} style={actionButtonStyle}>Close</NavBtn>
         </div>
       </div>
     </div>

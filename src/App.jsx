@@ -4,6 +4,7 @@ import LoginCard from './LoginCard'
 import UsernamePrompt from './UsernamePrompt'
 import BinderPage from './BinderPage'
 import { cacheProfile, readProfile } from './offlineCache'
+import { LoadingScreen } from './ui'
 
 // supabase-js throws instead of returning an error when getSession() tries a
 // background token refresh and the network is down. Read its own persisted
@@ -117,11 +118,11 @@ export default function App() {
     return () => subscription.unsubscribe()
   }, [])
 
-  if (session === undefined) return null // brief loading gap; no flash
+  if (session === undefined) return <LoadingScreen />
 
   if (!session) return <LoginCard />
 
-  if (profile === undefined) return null
+  if (profile === undefined) return <LoadingScreen />
   if (profile === null) return (
     <UsernamePrompt
       session={session}
@@ -129,5 +130,5 @@ export default function App() {
     />
   )
 
-  return <BinderPage profile={profile} userId={session.user.id} />
+  return <BinderPage userId={session.user.id} />
 }

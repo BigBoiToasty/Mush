@@ -1,4 +1,4 @@
-import {supabase} from "./supabaseClient";
+import { supabase } from './supabaseClient'
 import { cacheSlots, readSlots, readAllSlots, cacheBinders, readBinders } from './offlineCache'
 
 // Offline fallback for both find functions below: same case-insensitive
@@ -8,6 +8,25 @@ function searchSlotsOffline(slots, query) {
   return slots
     .filter((s) => s.card_name?.toLowerCase().includes(q))
     .sort((a, b) => a.page_number - b.page_number)
+}
+
+// Escape LIKE metacharacters so a user-typed % or _ matches literally
+// instead of acting as a wildcard.
+const escapeLike = (query) => query.replace(/[\\%_]/g, '\\$&')
+
+// The same physical card has a different ID per language database, so
+// anything keyed by card must be keyed by (language, card_id).
+const cardKey = (language, cardId) => `${language}|${cardId}`
+
+// One card's tcgdex JSON, or null on any failure -- every caller is a
+// best-effort path (pricing, rarity, backfill) that degrades gracefully.
+async function fetchCard(language, cardId) {
+  try {
+    const response = await fetch(cardUrl(language, cardId))
+    return response.ok ? await response.json() : null
+  } catch {
+    return null
+  }
 }
 
 //  LANGUAGE STUFF
@@ -106,14 +125,11 @@ export async function deleteCard(binderId, pageNumber, slotNumber) {
 }
 
 export async function findCardsByName(binderId, query) {
-  // Escape LIKE metacharacters so a user-typed % or _ matches literally
-  // instead of acting as a wildcard.
-  const escaped = query.replace(/[\\%_]/g, '\\$&')
   const { data, error } = await supabase
     .from('binder_slots')
     .select('*')
     .eq('binder_id', binderId)
-    .ilike('card_name', `%${escaped}%`)
+    .ilike('card_name', `%${escapeLike(query)}%`)
     .order('page_number', { ascending: true })
 
   if (error) {
@@ -128,12 +144,11 @@ export async function findCardsByNameAllBinders(userId, query) {
   const binders = await getBinders(userId)
   if (!binders.length) return []
 
-  const escaped = query.replace(/[\\%_]/g, '\\$&')
   const { data, error } = await supabase
     .from('binder_slots')
     .select('*')
     .in('binder_id', binders.map((b) => b.id))
-    .ilike('card_name', `%${escaped}%`)
+    .ilike('card_name', `%${escapeLike(query)}%`)
     .order('page_number', { ascending: true })
 
   const namesById = new Map(binders.map((b) => [b.id, b.name]))
@@ -196,12 +211,9 @@ export function holoEffectFor(variant, rarity) {
 // a missing rarity just means "no fancy effect", never an error.
 const rarityCache = new Map()
 export function getCardRarity(language, cardId) {
-  const key = `${language}|${cardId}`
+  const key = cardKey(language, cardId)
   if (!rarityCache.has(key)) {
-    rarityCache.set(key, fetch(cardUrl(language, cardId))
-      .then((response) => (response.ok ? response.json() : null))
-      .then((card) => card?.rarity ?? null)
-      .catch(() => null))
+    rarityCache.set(key, fetchCard(language, cardId).then((card) => card?.rarity ?? null))
   }
   return rarityCache.get(key)
 }
@@ -232,24 +244,19 @@ export async function backfillCardNames(binderId) {
 
   // A card_id only resolves against its own language's endpoint, so backfill
   // per unique (language, card_id) pair.
-  const pairs = [...new Map(data.map((s) => [`${s.language}|${s.card_id}`, s])).values()]
+  const pairs = [...new Map(data.map((s) => [cardKey(s.language, s.card_id), s])).values()]
   await Promise.all(pairs.map(async ({ card_id, language }) => {
-    try {
-      const response = await fetch(cardUrl(language, card_id))
-      if (!response.ok) return
-      const card = await response.json()
-      // Keyed on card_id + language + still-null so a slot replaced mid-backfill
-      // never gets the old card's name stamped onto it.
-      await supabase
-        .from('binder_slots')
-        .update({ card_name: card.name })
-        .eq('binder_id', binderId)
-        .eq('card_id', card_id)
-        .eq('language', language)
-        .is('card_name', null)
-    } catch (err) {
-      console.error('Backfill error for', card_id, err)
-    }
+    const card = await fetchCard(language, card_id)
+    if (!card) return
+    // Keyed on card_id + language + still-null so a slot replaced mid-backfill
+    // never gets the old card's name stamped onto it.
+    await supabase
+      .from('binder_slots')
+      .update({ card_name: card.name })
+      .eq('binder_id', binderId)
+      .eq('card_id', card_id)
+      .eq('language', language)
+      .is('card_name', null)
   }))
 }
 
@@ -277,18 +284,12 @@ export async function getBinderWorth(binderId) {
 
   if (error || !data?.length) return 0
 
-  // Key by language + card_id since the same id can exist in multiple language
-  // databases as different cards.
-  const key = (slot) => `${slot.language}|${slot.card_id}`
+  const key = (slot) => cardKey(slot.language, slot.card_id)
   const pairs = [...new Map(data.map((slot) => [key(slot), slot])).values()]
   const cardsByKey = new Map()
   await Promise.all(pairs.map(async (slot) => {
-    try {
-      const response = await fetch(cardUrl(slot.language, slot.card_id))
-      if (response.ok) cardsByKey.set(key(slot), await response.json())
-    } catch (err) {
-      console.error('Live price fetch error for', slot.card_id, err)
-    }
+    const card = await fetchCard(slot.language, slot.card_id)
+    if (card) cardsByKey.set(key(slot), card)
   }))
 
   return data.reduce((sum, slot) => {
@@ -344,22 +345,14 @@ export async function getSetCompletion(binderId) {
   // on so the completion view can point at each copy.
   const entryByKey = new Map()
   for (const s of slots) {
-    const key = `${s.language}|${s.card_id}`
+    const key = cardKey(s.language, s.card_id)
     if (!entryByKey.has(key)) entryByKey.set(key, { language: s.language, card_id: s.card_id, pages: [] })
     entryByKey.get(key).pages.push(s.page_number)
   }
   const pairs = [...entryByKey.values()]
   pairs.forEach((p) => p.pages.sort((a, b) => a - b))
 
-  const cards = await Promise.all(pairs.map(async ({ language, card_id }) => {
-    try {
-      const response = await fetch(cardUrl(language, card_id))
-      return response.ok ? await response.json() : null
-    } catch (err) {
-      console.error('Set completion fetch error for', card_id, err)
-      return null
-    }
-  }))
+  const cards = await Promise.all(pairs.map(({ language, card_id }) => fetchCard(language, card_id)))
 
   return groupOwnedCardsBySet(pairs, cards)
 }
@@ -437,6 +430,110 @@ export function planMove(src, dest, heldCard, destCard) {
   ]
 }
 
+export async function renameBinders(binderId, name) {
+  const { error } = await supabase
+    .from('binders')
+    .update({ name })
+    .eq('id', binderId)
+
+  if (error) {
+    console.error('Binder rename error:', error)
+    throw error
+  }
+}
+
+// Pure: CSV of a binder's slots, sorted by page/slot. Fields are quoted per
+// RFC 4180 so card names with commas or quotes survive a spreadsheet import.
+// card_image is included so the file is a restorable backup (csvToSlots),
+// not just a snapshot.
+export function slotsToCsv(binderName, slots) {
+  const esc = (value) => {
+    const s = String(value ?? '')
+    return /[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s
+  }
+  const rows = [...slots]
+    .sort((a, b) => a.page_number - b.page_number || a.slot_number - b.slot_number)
+    .map((s) =>
+      [binderName, s.page_number, s.slot_number, s.card_id, s.card_name, s.variant, s.language, s.card_image]
+        .map(esc).join(','))
+  return ['binder,page,slot,card_id,card_name,variant,language,card_image', ...rows].join('\n')
+}
+
+// Pure: RFC 4180 CSV text -> rows of string fields. Handles quoted fields
+// containing commas, doubled quotes, and newlines; accepts \n or \r\n.
+function parseCsv(text) {
+  const rows = [[]]
+  let field = ''
+  let inQuotes = false
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (inQuotes) {
+      if (c !== '"') field += c
+      else if (text[i + 1] === '"') { field += '"'; i++ }
+      else inQuotes = false
+    } else if (c === '"') {
+      inQuotes = true
+    } else if (c === ',') {
+      rows[rows.length - 1].push(field)
+      field = ''
+    } else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++
+      rows[rows.length - 1].push(field)
+      field = ''
+      rows.push([])
+    } else {
+      field += c
+    }
+  }
+  rows[rows.length - 1].push(field)
+  const last = rows[rows.length - 1]
+  if (last.length === 1 && last[0] === '') rows.pop() // trailing newline
+  return rows
+}
+
+// Pure: parse an exported CSV back into slot rows for import. Header-driven,
+// so column order doesn't matter and extra columns (like binder) are ignored.
+// Throws with a row-numbered message on anything that can't become a slot.
+export function csvToSlots(text) {
+  const rows = parseCsv(text)
+  const header = rows.shift() ?? []
+  const idx = Object.fromEntries(header.map((h, i) => [h.trim(), i]))
+  for (const col of ['page', 'slot', 'card_id', 'card_image']) {
+    if (idx[col] === undefined) throw new Error(`Missing "${col}" column -- is this a Mush export?`)
+  }
+  return rows.map((r, n) => {
+    const page = Number(r[idx.page])
+    const slot = Number(r[idx.slot])
+    if (!Number.isInteger(page) || page < 1 || !Number.isInteger(slot) || slot < 0 || slot > 8
+      || !r[idx.card_id] || !r[idx.card_image]) {
+      throw new Error(`Row ${n + 2} is not a valid card row`)
+    }
+    return {
+      page_number: page,
+      slot_number: slot,
+      card_id: r[idx.card_id],
+      card_image: r[idx.card_image],
+      card_name: r[idx.card_name] || null,
+      variant: r[idx.variant] || null,
+      language: r[idx.language] || 'en',
+    }
+  })
+}
+
+// Bulk upsert for CSV import -- one request for the whole file. Same
+// conflict target as saveCards, so imported rows replace occupied slots.
+export async function importSlots(binderId, slots) {
+  const rows = slots.map((s) => ({ ...s, binder_id: binderId }))
+  const { error } = await supabase
+    .from('binder_slots')
+    .upsert(rows, { onConflict: 'binder_id, page_number, slot_number' })
+
+  if (error) {
+    console.error('Import error:', error)
+    throw error
+  }
+}
+
 export async function deleteBinders(binderId) {
   // Delete slots first regardless of whether a DB cascade exists on
   // binder_id -- safe either way, and guarantees no orphaned rows if not.
@@ -503,8 +600,7 @@ export async function getSharedBinder(token) {
 }
 
 export async function searchSharedBinder(token, query) {
-  const escaped = query.replace(/[\\%_]/g, '\\$&')
-  const { data, error } = await supabase.rpc('search_shared_binder', { token, query: escaped })
+  const { data, error } = await supabase.rpc('search_shared_binder', { token, query: escapeLike(query) })
 
   if (error) {
     console.error('Search shared binder error:', error)

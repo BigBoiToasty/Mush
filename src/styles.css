@@ -148,6 +148,20 @@
     background: transparent;
 }
 
+/* "More" menu popout -- slides in from the right instead of just appearing.
+   Duration/easing matches the "Add Cards"/"More" push-left transition in
+   BinderPage.jsx (grid-template-columns 0.2s ease-out) so the two motions
+   stay in sync and visibly overlap instead of one finishing before the
+   other starts. */
+@keyframes dropdown-slide-in-right {
+    from { transform: translateX(40px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+.dropdown-menu-slide-in {
+    animation: dropdown-slide-in-right 0.2s ease-out;
+}
+
 /* Card search modal */
 .card-search-overlay {
     position: fixed;
@@ -229,7 +243,7 @@
     border: 2px solid #0a0a0a;
     border-radius: 8px;
     padding: 20px;
-    max-width: 480px;
+    max-width: 640px;
     max-height: 80vh;
     overflow-y: auto;
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
@@ -250,7 +264,7 @@
 }
 
 /* Click-to-zoom in the detail popup; capped so it stays inside the panel
-   (max-width 480px incl. padding) and the viewport on phones. */
+   (max-width 640px incl. padding) and the viewport on phones. */
 .card-detail-image--zoomed {
     width: min(70vw, 420px);
     cursor: zoom-out;
@@ -271,6 +285,7 @@
 
 .card-detail-actions {
     display: flex;
+    flex-wrap: nowrap;
     gap: 8px;
     justify-content: center;
 }

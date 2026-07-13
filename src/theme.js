@@ -75,7 +75,6 @@ export const theme = {
       google:     { left: '80.7%',  top: '30%',    pad: '0cqw',  matchInput: true }, // username row, login only
       flip:       { left: '75.2%',  top: '54.91%', matchInput: true },               // password row, both modes
       login:      { left: '20.2%',  top: '73.54%', font: '2.7cqw' },
-      forgot:     { left: '36.67%', top: '73.54%', font: '2.7cqw' },
       createAcct: { left: '70.1%',  top: '79.28%', matchInput: true },               // confirm pw row, signup only
     },
   },

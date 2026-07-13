@@ -39,7 +39,17 @@ export function readAllSlots(binderId) {
   }
   return slots
 }
+// Shared-binder view cache (public link, keyed by token) -- lets a shared
+// binder still render after the first successful load even if the network is
+// gone; the RPC calls behind it are POSTs the service worker won't cache.
+export const cacheShared = (token, suffix, value) => set(`shared.${token}.${suffix}`, value)
+export const readShared = (token, suffix) => get(`shared.${token}.${suffix}`)
+
 export const cacheBinders = (userId, binders) => set(`binders.${userId}`, binders)
 export const readBinders = (userId) => get(`binders.${userId}`)
 export const cacheProfile = (userId, profile) => set(`profile.${userId}`, profile)
 export const readProfile = (userId) => get(`profile.${userId}`)
+
+// Pending offline writes, replayed by offlineQueue when the network returns.
+export const readQueue = () => get('writeQueue') ?? []
+export const writeQueue = (ops) => set('writeQueue', ops)

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { navButtonClass, navButtonStyle } from './navButton'
+import { NavBtn, useDismiss } from './ui'
 
 export default function FindInBinderOverlay({ onFind, onFindAll, onSelectResult, onClose }) {
   const [query, setQuery] = useState('')
@@ -8,6 +8,7 @@ export default function FindInBinderOverlay({ onFind, onFindAll, onSelectResult,
   const [searched, setSearched] = useState(false)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
+  const onBackdropClick = useDismiss(onClose)
 
   async function handleSearch(e) {
     e.preventDefault()
@@ -30,7 +31,7 @@ export default function FindInBinderOverlay({ onFind, onFindAll, onSelectResult,
   }
 
   return (
-    <div className="card-search-overlay">
+    <div className="card-search-overlay" onClick={onBackdropClick}>
       <form onSubmit={handleSearch} className="card-search-bar flex flex-col gap-2">
         <div className="flex gap-2">
           <input
@@ -40,12 +41,8 @@ export default function FindInBinderOverlay({ onFind, onFindAll, onSelectResult,
             placeholder="Find a card in your binder..."
             className="rounded border border-gray-400 px-3 py-2 text-base"
           />
-          <button type="submit" disabled={loading} className={navButtonClass} style={navButtonStyle}>
-            {loading ? '...' : 'Find'}
-          </button>
-          <button type="button" onClick={onClose} className={navButtonClass} style={navButtonStyle}>
-            Cancel
-          </button>
+          <NavBtn type="submit" disabled={loading}>{loading ? '...' : 'Find'}</NavBtn>
+          <NavBtn onClick={onClose}>Cancel</NavBtn>
         </div>
         <label className="flex items-center gap-2 text-white">
           <input type="checkbox" checked={allBinders} onChange={(e) => setAllBinders(e.target.checked)} />

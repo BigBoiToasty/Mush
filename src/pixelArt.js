@@ -60,3 +60,26 @@ export const FRAME_SHARP = pixelFrame(0)
 // Red variant for destructive actions (Delete Binder, Remove from Binder) --
 // same pixel-frame look, red gradient + fill instead of the default blue.
 export const FRAME_SHARP_DANGER = pixelFrame(0, ['#7a1e18', '#b3261e', '#e2867e'], '#f6d9d6')
+
+// Button skins: alternate border/fill palettes for NavBtn, picked by the user
+// in the style picker overlay. 'tide' matches the default login-card look;
+// each other skin reuses pixelFrame() with its own gradient + fill + text
+// color. Frames build lazily (on first getButtonSkinFrame call for a skin)
+// since pixelFrame() touches the DOM canvas.
+export const BUTTON_SKINS = {
+  tide:     { name: 'Tide',     border: theme.colors.inputBorder,            fill: theme.colors.inputFill, text: theme.colors.inputText },
+  kelp:     { name: 'Kelp',     border: ['#1c4a2e', '#2f7a4a', '#7fc99a'],    fill: '#cdf0da', text: '#0a2e17' },
+  abyss:    { name: 'Abyss',    border: ['#081426', '#0f2c4a', '#3f6f9c'],    fill: '#d7e6f2', text: '#081426' },
+  coral:    { name: 'Coral',    border: ['#7a3a1e', '#c96a3a', '#f0a878'],    fill: '#fbe4d2', text: '#4a2410' },
+  sand:     { name: 'Sand',     border: ['#8a7752', '#c2ac7a', '#ecdcb6'],    fill: '#faf3e2', text: '#4a3f24' },
+  obsidian: { name: 'Obsidian', border: ['#000000', '#2a2a2a', '#4a4a4a'],   fill: '#1a1a1a', text: '#e8e8e8' },
+}
+
+const skinFrameCache = {}
+export function getButtonSkinFrame(skinKey) {
+  const skin = BUTTON_SKINS[skinKey] || BUTTON_SKINS.tide
+  if (!skinFrameCache[skinKey]) {
+    skinFrameCache[skinKey] = pixelFrame(0, skin.border, skin.fill)
+  }
+  return skinFrameCache[skinKey]
+}

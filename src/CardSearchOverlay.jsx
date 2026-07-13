@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { navButtonClass, navButtonStyle } from './navButton'
+import { NavBtn, useDismiss } from './ui'
 import { LANGUAGES, cardUrl, hasCJK, pickByExactName } from './cards'
 import CardDetailPopup from './CardDetailPopup'
 
@@ -23,6 +23,7 @@ export default function CardSearchOverlay({ onSelect, onClose }) {
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
   const [detailCard, setDetailCard] = useState(null)
+  const onBackdropClick = useDismiss(onClose)
 
   async function handleSearch(e) {
     e.preventDefault()
@@ -62,7 +63,7 @@ export default function CardSearchOverlay({ onSelect, onClose }) {
   }
 
   return (
-    <div className="card-search-overlay">
+    <div className="card-search-overlay" onClick={onBackdropClick}>
       <form onSubmit={handleSearch} className="card-search-bar flex gap-2">
         <select
           value={language}
@@ -85,12 +86,8 @@ export default function CardSearchOverlay({ onSelect, onClose }) {
           placeholder="Search Pokemon..."
           className="rounded border border-gray-400 px-3 py-2 text-base"
         />
-        <button type="submit" disabled={loading} className={navButtonClass} style={navButtonStyle}>
-          {loading ? '...' : 'Search'}
-        </button>
-        <button type="button" onClick={onClose} className={navButtonClass} style={navButtonStyle}>
-          Cancel
-        </button>
+        <NavBtn type="submit" disabled={loading}>{loading ? '...' : 'Search'}</NavBtn>
+        <NavBtn onClick={onClose}>Cancel</NavBtn>
       </form>
       {error && <p className="card-search-error">{error}</p>}
       {results.length > 0 && (

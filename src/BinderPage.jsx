@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from './supabaseClient'
-import { theme } from './theme'
 import { useBinder } from './useBinder'
 import BinderGrid from './BinderGrid'
 import CardSearchOverlay from './CardSearchOverlay'
@@ -13,29 +12,52 @@ import ShareOverlay from './ShareOverlay'
 import SetCompletionOverlay from './SetCompletionOverlay'
 import OfflineReadyOverlay from './OfflineReadyOverlay'
 import notebookBg from './assets/binder-notebook.png'
-import { TIDE_BG } from './pixelArt'
-import { navButtonClass, navButtonStyle, dangerButtonStyle } from './navButton'
-import { planMove } from './cards'
+import { fontBase, pageBg, NavBtn, PageNav, OverlayPanel, ButtonSkinPicker, DropdownMenu, spreadStartForPage, usePageSwipe, LoadingScreen } from './ui'
+import { planMove, getAllBinderSlots, slotsToCsv, csvToSlots, importSlots } from './cards'
 import { syncAllForOffline } from './offlineSync'
 import { readSlots } from './offlineCache'
+import { flushQueue } from './offlineQueue'
 import './styles.css'
 
-const t = theme
-const fontBase = { fontFamily: t.font.family, letterSpacing: t.font.letterSpacing }
-const pageBg = { background: TIDE_BG, backgroundSize: 'cover', imageRendering: 'pixelated' }
-
-// Pages render as an odd/even spread (activePage / activePage + 1), so
-// landing on an arbitrary target page means picking whichever spread
-// actually contains it.
-function spreadStartForPage(pageNumber) {
-  const clamped = Math.max(1, pageNumber)
-  return clamped % 2 === 1 ? clamped : clamped - 1
+// A DB slot row uses snake_case; placeCard expects the camelCase card shape.
+function slotToCard(slot) {
+  return {
+    cardId: slot.card_id,
+    cardImage: slot.card_image,
+    variant: slot.variant,
+    cardName: slot.card_name,
+    language: slot.language,
+  }
 }
+
+function CardBanner({ image, onCancel, children }) {
+  return (
+    <div className="flex shrink-0 items-center gap-2 text-white">
+      <img src={image} alt="" className="h-10" />
+      <span>{children}</span>
+      <NavBtn onClick={onCancel}>Cancel</NavBtn>
+    </div>
+  )
+}
+
+// [label, action key, danger?] for the "More" dropdown. Keys are overlay
+// names except 'export', which downloads immediately instead.
+const MENU_ITEMS = [
+  ['Find in Binder', 'find'],
+  ['Binders', 'switcher'],
+  ['Binder Info', 'stats'],
+  ['Share Binder', 'share'],
+  ['Set Completion', 'completion'],
+  ['Button Style', 'buttonStyle'],
+  ['Export CSV', 'export'],
+  ['Import CSV', 'import'],
+  ['Delete Binder', 'delete', true],
+]
 
 export default function BinderPage({ userId }) {
   const {
     binderId, binderName, loading, error, fetchPage, placeCard, removeCard, findInBinder, findInAllBinders,
-    listBinders, switchBinder, createBinder, deleteBinder, getCounts, getWorth,
+    listBinders, switchBinder, createBinder, renameBinder, deleteBinder, getCounts, getWorth,
     getShareToken, setShareToken, getCompletion, getSetCards,
   } = useBinder(userId)
   // Survives a remount (alt-tab away/back can retrigger auth or reload the
@@ -43,25 +65,22 @@ export default function BinderPage({ userId }) {
   const [activePage, setActivePage] = useState(() => Number(sessionStorage.getItem('mush:activePage')) || 1)
   const [leftSlots, setLeftSlots] = useState([])
   const [rightSlots, setRightSlots] = useState([])
-  const [activeSlot, setActiveSlot] = useState(null) // { pageNumber, slotNumber } | null
-  const [searchOpen, setSearchOpen] = useState(false)
-  const [findOpen, setFindOpen] = useState(false)
+  // Only one full-screen overlay can be open at a time:
+  // 'search' | 'find' | 'switcher' | 'stats' | 'share' | 'completion' | 'delete' | 'offlineInfo' | null
+  const [overlay, setOverlay] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [switcherOpen, setSwitcherOpen] = useState(false)
-  const [statsOpen, setStatsOpen] = useState(false)
-  const [shareOpen, setShareOpen] = useState(false)
-  const [completionOpen, setCompletionOpen] = useState(false)
-  const [deleteOpen, setDeleteOpen] = useState(false)
-  const [editingPage, setEditingPage] = useState(false)
-  const [pageJumpInput, setPageJumpInput] = useState('')
-  const pageInputRef = useRef(null)
+  const [activeSlot, setActiveSlot] = useState(null) // { pageNumber, slotNumber } | null
   const [pendingCard, setPendingCard] = useState(null) // card picked from top search, awaiting a slot
-  const [viewingSlot, setViewingSlot] = useState(null) // { pageNumber, slotNumber, cardId, variant, cardImage, cardName } | null
+  const [viewingSlot, setViewingSlot] = useState(null) // { pageNumber, slotNumber, card } | null
   const [heldCard, setHeldCard] = useState(null) // { srcPage, srcSlot, card } | null, a card picked up to move
   const [actionError, setActionError] = useState(null)
   const [offlineReady, setOfflineReady] = useState(false)
-  const [offlineInfoOpen, setOfflineInfoOpen] = useState(false)
+  const [lastPage, setLastPage] = useState(0) // highest page holding a card
+  const [pendingImport, setPendingImport] = useState(null) // { slots } | { error } | null
+  const [importing, setImporting] = useState(false)
+  const fileInputRef = useRef(null)
   const loadSeq = useRef(0)
+  const swipeHandlers = usePageSwipe(setActivePage)
 
   const reloadPages = useCallback(async () => {
     if (!binderId) return
@@ -76,14 +95,16 @@ export default function BinderPage({ userId }) {
       setLeftSlots(cachedLeft ?? [])
       setRightSlots(cachedRight ?? [])
     }
-    const [left, right] = await Promise.all([
+    const [left, right, counts] = await Promise.all([
       fetchPage(activePage),
       fetchPage(activePage + 1),
+      getCounts(), // keeps "Page X / Y" current after placements/removals
     ])
     if (seq !== loadSeq.current) return
     setLeftSlots(left)
     setRightSlots(right)
-  }, [binderId, activePage, fetchPage])
+    setLastPage(counts.pageCount)
+  }, [binderId, activePage, fetchPage, getCounts])
 
   useEffect(() => {
     reloadPages()
@@ -104,40 +125,16 @@ export default function BinderPage({ userId }) {
     return () => { cancelled = true }
   }, [userId])
 
+  // Replay writes queued while offline -- on reconnect, and once on mount to
+  // catch anything left over from a previous session.
   useEffect(() => {
-    if (editingPage) pageInputRef.current?.focus()
-  }, [editingPage])
-
-  const displayedPage = (activePage + 1) / 2
-
-  // Step by 2 so activePage stays odd (left page of the spread), matching
-  // what spreadStartForPage produces for jumps and find results.
-  function handlePrevPage() {
-    setActivePage((p) => Math.max(1, p - 2))
-  }
-
-  function handleNextPage() {
-    setActivePage((p) => p + 2)
-  }
-
-  function handleStartEditPage() {
-    setPageJumpInput(String(displayedPage))
-    setEditingPage(true)
-  }
-
-  function handleCancelEditPage() {
-    setEditingPage(false)
-    setPageJumpInput('')
-  }
-
-  function handlePageJump(e) {
-    e.preventDefault()
-    const target = Number(pageJumpInput)
-    if (!Number.isInteger(target) || target < 1) return
-    setActivePage(target * 2 - 1)
-    setEditingPage(false)
-    setPageJumpInput('')
-  }
+    const flush = async () => {
+      if ((await flushQueue()) > 0) reloadPages()
+    }
+    flush()
+    window.addEventListener('online', flush)
+    return () => window.removeEventListener('online', flush)
+  }, [reloadPages])
 
   function resetForBinderChange() {
     setActivePage(1)
@@ -162,7 +159,7 @@ export default function BinderPage({ userId }) {
   function handleFindResultSelect(pageNumber, resultBinderId, resultBinderName) {
     if (resultBinderId !== binderId) handleSwitchBinder(resultBinderId, resultBinderName)
     setActivePage(spreadStartForPage(pageNumber))
-    setFindOpen(false)
+    setOverlay(null)
   }
 
   async function handleDeleteBinder(idToDelete) {
@@ -173,46 +170,43 @@ export default function BinderPage({ userId }) {
     }
   }
 
-  // A DB slot row uses snake_case; placeCard expects the camelCase card shape.
-  function slotToCard(slot) {
-    return {
-      cardId: slot.card_id,
-      cardImage: slot.card_image,
-      variant: slot.variant,
-      cardName: slot.card_name,
-      language: slot.language,
+  // Shared DB error handling: run the action, surface a message on failure.
+  // Returns false on failure so callers can keep their in-flight state
+  // (pendingCard/heldCard/activeSlot) and let the user retry another slot.
+  async function runDb(action, message) {
+    setActionError(null)
+    try {
+      await action()
+    } catch {
+      setActionError(message)
+      return false
     }
+    return true
   }
 
   async function runMove(dest, destCard) {
     if (!heldCard) return
     const src = { page: heldCard.srcPage, slot: heldCard.srcSlot }
     const ops = planMove(src, dest, heldCard, destCard)
-    setActionError(null)
-    try {
+    const ok = await runDb(async () => {
       for (const op of ops) {
         if (op.type === 'place') await placeCard(op.page, op.slot, op.card)
         else await removeCard(op.page, op.slot)
       }
-    } catch {
-      // keep heldCard so the user can retry another slot
-      setActionError("Couldn't move the card. Please try again.")
-      return
-    }
+    }, "Couldn't move the card. Please try again.")
+    if (!ok) return
     setHeldCard(null)
     await reloadPages()
   }
 
   async function placeCardAt(pageNumber, slotNumber, card) {
-    setActionError(null)
-    try {
-      await placeCard(pageNumber, slotNumber, card)
-    } catch {
-      // keep pendingCard so the user can retry another slot
-      setActionError("Couldn't save the card. Please try again.")
-      return
-    }
+    const ok = await runDb(
+      () => placeCard(pageNumber, slotNumber, card),
+      "Couldn't save the card. Please try again.",
+    )
+    if (!ok) return
     setPendingCard(null)
+    setActiveSlot(null)
     await reloadPages()
   }
 
@@ -230,61 +224,82 @@ export default function BinderPage({ userId }) {
     setViewingSlot({
       pageNumber,
       slotNumber,
-      cardId: slot.card_id,
-      variant: slot.variant ?? null,
-      cardImage: slot.card_image,
-      cardName: slot.card_name,
-      language: slot.language ?? 'en',
+      card: { ...slotToCard(slot), variant: slot.variant ?? null, language: slot.language ?? 'en' },
     })
   }
 
   function handleMoveViewingSlot() {
     if (!viewingSlot) return
-    setHeldCard({
-      srcPage: viewingSlot.pageNumber,
-      srcSlot: viewingSlot.slotNumber,
-      card: {
-        cardId: viewingSlot.cardId,
-        cardImage: viewingSlot.cardImage,
-        variant: viewingSlot.variant,
-        cardName: viewingSlot.cardName,
-        language: viewingSlot.language,
-      },
-    })
+    setHeldCard({ srcPage: viewingSlot.pageNumber, srcSlot: viewingSlot.slotNumber, card: viewingSlot.card })
+    setViewingSlot(null)
+  }
+
+  // placeCardAt upserts on (page, slot), so re-placing the same card with a
+  // new variant simply overwrites the existing row -- no separate update path.
+  async function handleChangeVariant(variant) {
+    if (!viewingSlot || variant === viewingSlot.card.variant) return setViewingSlot(null)
+    await placeCardAt(viewingSlot.pageNumber, viewingSlot.slotNumber, { ...viewingSlot.card, variant })
     setViewingSlot(null)
   }
 
   async function handleRemoveViewingSlot() {
     if (!viewingSlot) return
-    setActionError(null)
-    try {
-      await removeCard(viewingSlot.pageNumber, viewingSlot.slotNumber)
-    } catch {
-      setActionError("Couldn't remove the card. Please try again.")
-      return
-    }
+    const ok = await runDb(
+      () => removeCard(viewingSlot.pageNumber, viewingSlot.slotNumber),
+      "Couldn't remove the card. Please try again.",
+    )
+    if (!ok) return
     setViewingSlot(null)
     await reloadPages()
   }
 
-  async function handleSelectCard(card) {
-    setSearchOpen(false)
-    if (activeSlot) {
-      setActionError(null)
-      try {
-        await placeCard(activeSlot.pageNumber, activeSlot.slotNumber, card)
-      } catch {
-        setActionError("Couldn't save the card. Please try again.")
-        return
-      }
-      setActiveSlot(null)
-      await reloadPages()
-    } else {
-      setPendingCard(card)
+  function handleMenuSelect(key) {
+    setMenuOpen(false)
+    if (key === 'export') return handleExportCsv()
+    if (key === 'import') return fileInputRef.current?.click()
+    setOverlay(key)
+  }
+
+  async function handleImportFile(e) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // allow re-picking the same file
+    if (!file) return
+    try {
+      setPendingImport({ slots: csvToSlots(await file.text()) })
+    } catch (err) {
+      setPendingImport({ error: err.message })
     }
   }
 
-  if (loading) return null
+  async function handleConfirmImport() {
+    setImporting(true)
+    try {
+      await importSlots(binderId, pendingImport.slots)
+      setPendingImport(null)
+      await reloadPages()
+    } catch {
+      setPendingImport({ error: "Couldn't import. Check your connection and try again." })
+    }
+    setImporting(false)
+  }
+
+  async function handleExportCsv() {
+    const slots = await getAllBinderSlots(binderId)
+    const url = URL.createObjectURL(new Blob([slotsToCsv(binderName, slots)], { type: 'text/csv' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${binderName}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function handleSelectCard(card) {
+    setOverlay(null)
+    if (activeSlot) await placeCardAt(activeSlot.pageNumber, activeSlot.slotNumber, card)
+    else setPendingCard(card)
+  }
+
+  if (loading) return <LoadingScreen />
   if (error) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 text-white" style={{ ...fontBase, ...pageBg }}>
@@ -300,13 +315,7 @@ export default function BinderPage({ userId }) {
     >
       <div className="grid w-full shrink-0 grid-cols-3 items-center px-2">
         <div className="justify-self-start">
-          <button
-            onClick={() => supabase.auth.signOut()}
-            className={navButtonClass}
-            style={navButtonStyle}
-          >
-            Log Out
-          </button>
+          <NavBtn onClick={() => supabase.auth.signOut()}>Log Out</NavBtn>
         </div>
 
         <span className="relative justify-self-center text-2xl font-semibold text-white">
@@ -314,7 +323,7 @@ export default function BinderPage({ userId }) {
           {offlineReady && (
             <button
               type="button"
-              onClick={() => setOfflineInfoOpen(true)}
+              onClick={() => setOverlay('offlineInfo')}
               className="absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap text-xs font-normal text-green-400"
               title="Every card in your collection is cached -- safe to go offline"
             >
@@ -323,78 +332,71 @@ export default function BinderPage({ userId }) {
           )}
         </span>
 
+        {/* justify-self-end anchors this row's right edge to the column's right
+            edge. The menu itself is position: fixed (flush to the viewport's
+            top-right corner, not just this row), so it can never affect this
+            row's height. To still get the "push Add Cards/More left" effect,
+            an invisible same-sized stack of the menu buttons sits in normal
+            flow reserving that width -- all stacked on the same grid cell so
+            only the widest label's width (and one button's height) counts. */}
         <div className="flex items-center justify-self-end gap-2">
-          <button
-            type="button"
-            onClick={() => setSearchOpen(true)}
-            className={navButtonClass}
-            style={navButtonStyle}
+          <NavBtn onClick={() => setOverlay('search')}>Add Cards</NavBtn>
+          <NavBtn onClick={() => setMenuOpen((open) => !open)}>More &#9662;</NavBtn>
+          {/* Always mounted (not conditional on menuOpen) so grid-template-columns
+              can transition both ways -- 0fr collapses it to zero width when
+              closed, 1fr expands it to the invisible stack's natural width when
+              open, animating "Add Cards"/"More" sliding left as it grows.
+              0.2s ease-out matches .dropdown-menu-slide-in's timing (styles.css)
+              so the push-left and the menu's slide-in overlap instead of one
+              finishing before the other starts. */}
+          <div
+            className="grid"
+            style={{ gridTemplateColumns: menuOpen ? '1fr' : '0fr', transition: 'grid-template-columns 0.2s ease-out' }}
           >
-            Add Cards
-          </button>
-
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setMenuOpen((open) => !open)}
-              className={navButtonClass}
-              style={navButtonStyle}
-            >
-              More &#9662;
-            </button>
-            {menuOpen && (
-              <div className="absolute right-0 top-full z-10 mt-2 flex flex-col gap-2">
-                <button
-                  type="button"
-                  onClick={() => { setMenuOpen(false); setFindOpen(true) }}
-                  className={navButtonClass}
-                  style={navButtonStyle}
-                >
-                  Find in Binder
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setMenuOpen(false); setSwitcherOpen(true) }}
-                  className={navButtonClass}
-                  style={navButtonStyle}
-                >
-                  Binders
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setMenuOpen(false); setStatsOpen(true) }}
-                  className={navButtonClass}
-                  style={navButtonStyle}
-                >
-                  Binder Info
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setMenuOpen(false); setShareOpen(true) }}
-                  className={navButtonClass}
-                  style={navButtonStyle}
-                >
-                  Share Binder
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setMenuOpen(false); setCompletionOpen(true) }}
-                  className={navButtonClass}
-                  style={navButtonStyle}
-                >
-                  Set Completion
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setMenuOpen(false); setDeleteOpen(true) }}
-                  className={navButtonClass}
-                  style={dangerButtonStyle}
-                >
-                  Delete Binder
-                </button>
+            <div className="overflow-hidden" style={{ minWidth: 0 }}>
+              <div className="grid">
+                {MENU_ITEMS.map(([label], i) => (
+                  <NavBtn
+                    key={i}
+                    aria-hidden
+                    tabIndex={-1}
+                    style={{
+                      gridArea: '1 / 1',
+                      visibility: 'hidden',
+                      pointerEvents: 'none',
+                      padding: 'clamp(0.15rem, 0.7vh, 0.4rem) clamp(0.4rem, 1.8vh, 0.75rem)',
+                      fontSize: 'clamp(0.75rem, 2.2vh, 1rem)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {label}
+                  </NavBtn>
+                ))}
               </div>
-            )}
+            </div>
           </div>
+          {menuOpen && (
+            <DropdownMenu
+              onClose={() => setMenuOpen(false)}
+              className="dropdown-menu-slide-in fixed right-0 top-0 flex flex-col items-end"
+              style={{ gap: 'clamp(2px, 0.8vh, 8px)' }}
+            >
+              {MENU_ITEMS.map(([label, key, danger]) => (
+                <NavBtn
+                  key={key}
+                  danger={danger}
+                  onClick={() => handleMenuSelect(key)}
+                  style={{
+                    padding: 'clamp(0.15rem, 0.7vh, 0.4rem) clamp(0.4rem, 1.8vh, 0.75rem)',
+                    fontSize: 'clamp(0.75rem, 2.2vh, 1rem)',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {label}
+                </NavBtn>
+              ))}
+            </DropdownMenu>
+          )}
         </div>
       </div>
 
@@ -403,26 +405,18 @@ export default function BinderPage({ userId }) {
       )}
 
       {pendingCard && (
-        <div className="flex shrink-0 items-center gap-2 text-white">
-          <img src={pendingCard.cardImage} alt="" className="h-10" />
-          <span>Click a slot to place this card</span>
-          <button type="button" onClick={() => setPendingCard(null)} className={navButtonClass} style={navButtonStyle}>
-            Cancel
-          </button>
-        </div>
+        <CardBanner image={pendingCard.cardImage} onCancel={() => setPendingCard(null)}>
+          Click a slot to place this card
+        </CardBanner>
       )}
 
       {heldCard && (
-        <div className="flex shrink-0 items-center gap-2 text-white">
-          <img src={heldCard.card.cardImage} alt="" className="h-10" />
-          <span>Tap a slot to place {heldCard.card.cardName ?? 'this card'} (or Cancel)</span>
-          <button type="button" onClick={() => setHeldCard(null)} className={navButtonClass} style={navButtonStyle}>
-            Cancel
-          </button>
-        </div>
+        <CardBanner image={heldCard.card.cardImage} onCancel={() => setHeldCard(null)}>
+          Tap a slot to place {heldCard.card.cardName ?? 'this card'} (or Cancel)
+        </CardBanner>
       )}
 
-      <div className="binder-scale-wrap">
+      <div className="binder-scale-wrap" {...swipeHandlers}>
         <div id="binderView">
           <img src={notebookBg} alt="" className="binder-notebook-bg" aria-hidden="true" />
           <div className="binder-page-left">
@@ -446,118 +440,115 @@ export default function BinderPage({ userId }) {
         </div>
       </div>
 
-      {editingPage ? (
-        <form onSubmit={handlePageJump} className="flex shrink-0 items-center gap-4">
-          <button type="button" onClick={handleCancelEditPage} className={navButtonClass} style={navButtonStyle}>
-            Back
-          </button>
-          <input
-            ref={pageInputRef}
-            type="number"
-            min="1"
-            value={pageJumpInput}
-            onChange={(e) => setPageJumpInput(e.target.value)}
-            className="w-20 rounded border border-gray-400 px-2 py-1 text-base"
-          />
-          <button type="submit" className={navButtonClass} style={navButtonStyle}>
-            Go
-          </button>
-        </form>
-      ) : (
-        <div className="flex shrink-0 items-center gap-4">
-          <button
-            type="button"
-            onClick={handlePrevPage}
-            disabled={activePage <= 1}
-            className={navButtonClass}
-            style={navButtonStyle}
-          >
-            Prev
-          </button>
-          <button type="button" onClick={handleStartEditPage} className={navButtonClass} style={navButtonStyle}>
-            Page {displayedPage}
-          </button>
-          <button type="button" onClick={handleNextPage} className={navButtonClass} style={navButtonStyle}>
-            Next
-          </button>
-        </div>
-      )}
+      <PageNav activePage={activePage} setActivePage={setActivePage} lastPage={lastPage} />
 
-      {(activeSlot || searchOpen) && (
+      {(activeSlot || overlay === 'search') && (
         <CardSearchOverlay
           onSelect={handleSelectCard}
           onClose={() => {
             setActiveSlot(null)
-            setSearchOpen(false)
+            setOverlay(null)
           }}
         />
       )}
 
       {viewingSlot && (
         <CardDetailPopup
-          cardId={viewingSlot.cardId}
-          language={viewingSlot.language}
-          ownedVariant={viewingSlot.variant}
+          cardId={viewingSlot.card.cardId}
+          language={viewingSlot.card.language}
+          ownedVariant={viewingSlot.card.variant}
           onClose={() => setViewingSlot(null)}
           actions={[
+            { label: 'Save Variant', onClick: handleChangeVariant, requiresVariantChoice: true },
             { label: 'Move', onClick: handleMoveViewingSlot },
             { label: 'Remove from Binder', onClick: handleRemoveViewingSlot, danger: true },
           ]}
         />
       )}
 
-      {findOpen && (
+      {overlay === 'find' && (
         <FindInBinderOverlay
           onFind={findInBinder}
           onFindAll={findInAllBinders}
           onSelectResult={handleFindResultSelect}
-          onClose={() => setFindOpen(false)}
+          onClose={() => setOverlay(null)}
         />
       )}
 
-      {switcherOpen && (
+      {overlay === 'switcher' && (
         <BinderSwitcherOverlay
           currentBinderId={binderId}
           listBinders={listBinders}
           onSwitch={handleSwitchBinder}
           onCreate={handleCreateBinder}
-          onClose={() => setSwitcherOpen(false)}
+          onRename={renameBinder}
+          onClose={() => setOverlay(null)}
         />
       )}
 
-      {statsOpen && (
-        <BinderStatsOverlay getCounts={getCounts} getWorth={getWorth} onClose={() => setStatsOpen(false)} />
+      {overlay === 'stats' && (
+        <BinderStatsOverlay getCounts={getCounts} getWorth={getWorth} onClose={() => setOverlay(null)} />
       )}
 
-      {shareOpen && (
-        <ShareOverlay getShareToken={getShareToken} setShareToken={setShareToken} onClose={() => setShareOpen(false)} />
+      {overlay === 'share' && (
+        <ShareOverlay getShareToken={getShareToken} setShareToken={setShareToken} onClose={() => setOverlay(null)} />
       )}
 
-      {completionOpen && (
+      {overlay === 'completion' && (
         <SetCompletionOverlay
           getCompletion={getCompletion}
           getSetCards={getSetCards}
-          onClose={() => setCompletionOpen(false)}
+          onClose={() => setOverlay(null)}
           onAddCard={(card) => {
-            setCompletionOpen(false)
+            setOverlay(null)
             setPendingCard(card)
           }}
           onGoToPage={(pageNumber) => {
-            setCompletionOpen(false)
-            setActivePage(pageNumber % 2 === 1 ? pageNumber : pageNumber - 1)
+            setOverlay(null)
+            setActivePage(spreadStartForPage(pageNumber))
           }}
         />
       )}
 
-      {deleteOpen && (
+      {overlay === 'delete' && (
         <BinderDeleteOverlay
           listBinders={listBinders}
           onDelete={handleDeleteBinder}
-          onClose={() => setDeleteOpen(false)}
+          onClose={() => setOverlay(null)}
         />
       )}
 
-      {offlineInfoOpen && <OfflineReadyOverlay onClose={() => setOfflineInfoOpen(false)} />}
+      {overlay === 'offlineInfo' && <OfflineReadyOverlay onClose={() => setOverlay(null)} />}
+      {overlay === 'buttonStyle' && <ButtonSkinPicker onClose={() => setOverlay(null)} />}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv,text/csv"
+        onChange={handleImportFile}
+        className="hidden"
+      />
+
+      {pendingImport && (
+        <OverlayPanel onClose={() => setPendingImport(null)} panelStyle={{ minWidth: 280, maxWidth: 400 }}>
+          {pendingImport.error ? (
+            <p className="card-search-error">{pendingImport.error}</p>
+          ) : (
+            <p>
+              Import {pendingImport.slots.length} card{pendingImport.slots.length === 1 ? '' : 's'} into
+              &quot;{binderName}&quot;? Cards already in those slots will be replaced.
+            </p>
+          )}
+          <div className="flex items-center gap-2">
+            {!pendingImport.error && (
+              <NavBtn onClick={handleConfirmImport} disabled={importing}>
+                {importing ? '...' : 'Import'}
+              </NavBtn>
+            )}
+            <NavBtn onClick={() => setPendingImport(null)}>{pendingImport.error ? 'Close' : 'Cancel'}</NavBtn>
+          </div>
+        </OverlayPanel>
+      )}
     </div>
   )
 }

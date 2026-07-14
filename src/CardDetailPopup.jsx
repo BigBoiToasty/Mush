@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { NavBtn, useDismiss } from './ui'
 import { pickTcgplayerEntry, cardUrl } from './cards'
-import HoloTilt from './HoloTilt'
 
 const VARIANT_LABELS = { firstEdition: '1st Edition', holo: 'Holo', reverse: 'Reverse Holo', normal: 'Normal', wPromo: 'Promo Stamp' }
 const VARIANT_ORDER = ['normal', 'holo', 'reverse', 'firstEdition', 'wPromo']
@@ -82,14 +81,12 @@ export default function CardDetailPopup({ cardId, actions, onClose, ownedVariant
         {!error && !card && <p>Loading...</p>}
         {card && (
           <>
-            <HoloTilt variant={selectedVariant} rarity={card.rarity ?? null}>
-              <img
-                className={`card-detail-image${zoomed ? ' card-detail-image--zoomed' : ''}`}
-                src={`${card.image}/high.webp`}
-                alt={card.name}
-                onClick={() => setZoomed((z) => !z)}
-              />
-            </HoloTilt>
+            <img
+              className={`card-detail-image${zoomed ? ' card-detail-image--zoomed' : ''}`}
+              src={`${card.image}/high.webp`}
+              alt={card.name}
+              onClick={() => setZoomed((z) => !z)}
+            />
             <div className="card-detail-info">
               <h2>{card.name}</h2>
 

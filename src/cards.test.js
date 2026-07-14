@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { planMove, cardUrl, hasCJK, pickByExactName, groupOwnedCardsBySet, annotateSetCards, holoEffectFor, slotsToCsv, csvToSlots } from './cards'
+import { planMove, cardUrl, hasCJK, pickByExactName, groupOwnedCardsBySet, annotateSetCards, slotsToCsv, csvToSlots } from './cards'
 
 describe('hasCJK', () => {
   it('detects Japanese and Chinese text', () => {
@@ -107,38 +107,6 @@ describe('annotateSetCards', () => {
       { id: 'base1-1', name: 'Alakazam', owned: true, pages: [3, 7] },
       { id: 'base1-2', name: 'Blastoise', owned: false, pages: [] },
     ])
-  })
-})
-
-describe('holoEffectFor', () => {
-  it('maps the reverse variant to reverse regardless of rarity', () => {
-    expect(holoEffectFor('reverse', 'Ultra Rare')).toBe('reverse')
-    expect(holoEffectFor('reverse', null)).toBe('reverse')
-  })
-
-  it('picks the recipe by rarity for foil prints, even with a normal/null variant', () => {
-    expect(holoEffectFor('normal', 'Ultra Rare')).toBe('v')
-    expect(holoEffectFor(null, 'Rare Holo GX')).toBe('v')
-    expect(holoEffectFor('holo', 'Holo Rare V')).toBe('v')
-    expect(holoEffectFor('normal', 'Double rare')).toBe('v')
-    expect(holoEffectFor('holo', 'Holo Rare VMAX')).toBe('vmax')
-    expect(holoEffectFor('normal', 'Rare Rainbow')).toBe('rainbow')
-    expect(holoEffectFor('normal', 'Secret Rare')).toBe('rainbow')
-    expect(holoEffectFor('normal', 'Hyper rare')).toBe('rainbow')
-  })
-
-  it('gives classic holo rares and holo variants the vertical holo', () => {
-    expect(holoEffectFor('holo', 'Rare')).toBe('holo')
-    expect(holoEffectFor('holo', null)).toBe('holo')
-    expect(holoEffectFor('normal', 'Rare Holo')).toBe('holo')
-  })
-
-  it('returns null for plain prints', () => {
-    expect(holoEffectFor('normal', 'Common')).toBe(null)
-    expect(holoEffectFor('firstEdition', 'Rare')).toBe(null)
-    expect(holoEffectFor('wPromo', 'Uncommon')).toBe(null)
-    expect(holoEffectFor(null, null)).toBe(null)
-    expect(holoEffectFor(undefined, undefined)).toBe(null)
   })
 })
 

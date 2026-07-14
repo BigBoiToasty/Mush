@@ -339,7 +339,7 @@ export default function BinderPage({ userId }) {
             an invisible same-sized stack of the menu buttons sits in normal
             flow reserving that width -- all stacked on the same grid cell so
             only the widest label's width (and one button's height) counts. */}
-        <div className="flex items-center justify-self-end gap-2">
+        <div className="flex flex-wrap items-center justify-end justify-self-end gap-1">
           <NavBtn onClick={() => setOverlay('search')}>Add Cards</NavBtn>
           <NavBtn onClick={() => setMenuOpen((open) => !open)}>More &#9662;</NavBtn>
           {/* Always mounted (not conditional on menuOpen) so grid-template-columns

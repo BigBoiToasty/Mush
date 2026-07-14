@@ -1,5 +1,3 @@
-import HoloTilt from './HoloTilt'
-
 export default function CardSlot({ slot, isHeld, onChoose, onView }) {
   const boxClass = isHeld ? 'box box-held' : 'box'
   if (!slot) {
@@ -16,9 +14,7 @@ export default function CardSlot({ slot, isHeld, onChoose, onView }) {
   return (
     <div className={boxClass}>
       <button type="button" onClick={onView} aria-label="View card">
-        <HoloTilt variant={slot.variant} cardId={slot.card_id} language={slot.language ?? 'en'}>
-          <img src={slot.card_image} alt={slot.card_id} />
-        </HoloTilt>
+        <img src={slot.card_image} alt={slot.card_id} />
       </button>
     </div>
   )

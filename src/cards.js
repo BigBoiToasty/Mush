@@ -188,36 +188,6 @@ export function pickTcgplayerEntry(tcgplayer, variant) {
   return Object.entries(variants).find(([, v]) => v?.marketPrice != null)
 }
 
-// Pure: which pointer-tracked shine recipe a card gets. The print style
-// depends on the card's rarity, not just the owned variant -- a GX/V/ex/
-// ultra card is always a foil print even when its stored variant is
-// "normal"/null, and only classic holo rares get the vertical-bar holo.
-// Effect keys map to the CSS recipes in styles.css (ported per-rarity from
-// simeydotme/pokemon-cards-css). firstEdition/wPromo are print stamps, not
-// foil, so on plain rarities they get no effect.
-export function holoEffectFor(variant, rarity) {
-  if (variant === 'reverse') return 'reverse'
-  const r = (rarity ?? '').toLowerCase()
-  if (r.includes('vmax')) return 'vmax'
-  if (/rainbow|secret|hyper/.test(r)) return 'rainbow'
-  if (/\bv\b|vstar|gx|\bex\b|ultra|double rare|illustration|amazing|radiant|shiny|prime|legend|shining|full art|ace spec/.test(r)) return 'v'
-  if (variant === 'holo' || r.includes('holo')) return 'holo'
-  return null
-}
-
-// Rarity for a card the binder grid only knows by id -- same tcgdex JSON
-// the detail popup fetches, deduped per session and served from the
-// service worker's cache after first load. Resolves null on any failure so
-// a missing rarity just means "no fancy effect", never an error.
-const rarityCache = new Map()
-export function getCardRarity(language, cardId) {
-  const key = cardKey(language, cardId)
-  if (!rarityCache.has(key)) {
-    rarityCache.set(key, fetchCard(language, cardId).then((card) => card?.rarity ?? null))
-  }
-  return rarityCache.get(key)
-}
-
 // Picks one number to represent a card's value: the owned variant's
 // TCGplayer market price when available, else any priced TCGplayer
 // variant, else null (no Cardmarket fallback -- TCGplayer only, by request).

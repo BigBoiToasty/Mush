@@ -109,8 +109,8 @@ export default function CardSearchOverlay({ onSelect, onClose }) {
           onClose={() => setDetailCard(null)}
           actions={[{
             label: 'Add to Binder',
-            onClick: (variant) => {
-              onSelect({ cardId: detailCard.id, cardImage: `${detailCard.image}/high.webp`, variant, cardName: detailCard.name, language })
+            onClick: (variant, customFoilType) => {
+              onSelect({ cardId: detailCard.id, cardImage: `${detailCard.image}/high.webp`, variant, cardName: detailCard.name, language, customFoilType })
               setDetailCard(null)
             },
           }]}

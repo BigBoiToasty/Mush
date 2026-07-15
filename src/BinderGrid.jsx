@@ -1,4 +1,5 @@
 import CardSlot from './CardSlot'
+import LoadingDots from './LoadingDots'
 
 export function slotsByNumber(slots) {
   const bySlot = Array(9).fill(null)
@@ -11,6 +12,20 @@ export function slotsByNumber(slots) {
 }
 
 export default function BinderGrid({ pageNumber, slots, heldCard, onSlotChoose, onSlotView }) {
+  // slots === null means "not yet known" (first-ever load, no cache to show
+  // meanwhile) -- render one loading box per slot instead of "Choose Pokemon"
+  // empty-slot buttons, which would falsely claim the page is confirmed empty.
+  if (slots === null) {
+    return (
+      <div className="testGallery">
+        {Array.from({ length: 9 }, (_, i) => (
+          <div key={i} className="box">
+            <div className="loading-box"><LoadingDots /></div>
+          </div>
+        ))}
+      </div>
+    )
+  }
   const bySlot = slotsByNumber(slots)
   return (
     <div className="testGallery">

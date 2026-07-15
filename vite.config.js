@@ -10,7 +10,16 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
-      manifest: false, // browser-only: no installable app for now
+      manifest: {
+        name: 'Mush',
+        short_name: 'Mush',
+        description: 'Pokemon card binder',
+        start_url: '/',
+        display: 'standalone',
+        background_color: '#0a2540',
+        theme_color: '#0a2540',
+        icons: [{ src: '/icon-512.png', sizes: '512x512', type: 'image/png' }],
+      },
       devOptions: { enabled: true }, // SW is off by default under `vite dev` -- needed to test offline locally
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,webp,svg,woff,woff2}'],

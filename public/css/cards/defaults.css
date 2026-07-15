@@ -1,0 +1,44 @@
+/*
+  Default values for the CSS custom properties that base.css and the
+  per-rarity effect files read (--pointer-x, --rotate-x, --card-scale, etc).
+  simeydotme/pokemon-cards-css's own app sets these in Card.svelte's
+  component <style> block instead of a shared stylesheet -- ported here so
+  the vars exist before holoPointer.js starts writing to them, otherwise
+  rotateY(var(--rotate-x)) etc resolve to invalid values and the whole
+  transform/gradient declaration is dropped.
+  Source: Card.svelte, https://github.com/simeydotme/pokemon-cards-css (GPL-3.0)
+*/
+:root {
+  --pointer-x: 50%;
+  --pointer-y: 50%;
+  --pointer-from-center: 0;
+  --pointer-from-top: 0.5;
+  --pointer-from-left: 0.5;
+  --card-opacity: 0;
+  --card-scale: 1;
+  --translate-x: 0px;
+  --translate-y: 0px;
+  --rotate-x: 0deg;
+  --rotate-y: 0deg;
+  --background-x: 50%;
+  --background-y: 50%;
+
+  /* Not from the reference library -- --clip/--clip-trainer (cards.css)
+     already fit real modern (Sword & Shield/Scarlet & Violet-era) card
+     scans closely; that's the vendored default and stays untouched for
+     those. Older-template cards (Base through EX/DP, plus contemporary
+     POP promos -- see clipEra in foilHeuristic.js) have a noticeably
+     thinner border (~3.5% measured vs the vendored clip's 8% horizontal
+     inset) and a slightly taller art window, so the vendored clip leaves
+     visible uncovered strips of art on them. clip-era.css switches to
+     these wider variants for [data-clip-era="vintage"] only -- everything
+     else keeps the vendored --clip/--clip-trainer unmodified.
+     Deliberately generous (slight bleed onto the border) rather than
+     tight -- undershoot reads as a broken effect, a little bleed doesn't.
+     --clip-stage has no wide equivalent yet (its evolution-line notch
+     shape needs real old-template Stage 1/2 card measurements to
+     recalibrate safely); vintage Stage cards fall back to the vendored
+     stage clip unchanged. */
+  --clip-loose: inset(7% 4% 47% 4%);
+  --clip-trainer-loose: inset(11% 4.5% 42% 4.5%);
+}

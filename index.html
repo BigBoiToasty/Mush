@@ -3,10 +3,49 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/icon-512.png" type="image/png" />
+    <link rel="apple-touch-icon" href="/icon-512.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Mush" />
+    <meta name="theme-color" content="#0a2540" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
     <title>Mush</title>
+
+    <!-- simeydotme/pokemon-cards-css holo effect (GPL-3.0, see /LICENSE).
+         Order matters: base.css sets up the .card__* structure and defaults.css
+         must load after it (own :root vars pokemontcg's app normally sets via
+         Svelte component styles); the per-rarity files just add data-rarity[=]
+         overrides on top and can load in any order. -->
+    <link rel="stylesheet" href="/css/cards/base.css" />
+    <link rel="stylesheet" href="/css/cards/defaults.css" />
+    <link rel="stylesheet" href="/css/cards.css" />
+    <link rel="stylesheet" href="/css/cards/basic.css" />
+    <link rel="stylesheet" href="/css/cards/reverse-holo.css" />
+    <link rel="stylesheet" href="/css/cards/regular-holo.css" />
+    <link rel="stylesheet" href="/css/cards/cosmos-holo.css" />
+    <link rel="stylesheet" href="/css/cards/amazing-rare.css" />
+    <link rel="stylesheet" href="/css/cards/radiant-holo.css" />
+    <link rel="stylesheet" href="/css/cards/v-regular.css" />
+    <link rel="stylesheet" href="/css/cards/v-full-art.css" />
+    <link rel="stylesheet" href="/css/cards/v-max.css" />
+    <link rel="stylesheet" href="/css/cards/v-star.css" />
+    <link rel="stylesheet" href="/css/cards/trainer-full-art.css" />
+    <link rel="stylesheet" href="/css/cards/rainbow-holo.css" />
+    <link rel="stylesheet" href="/css/cards/rainbow-alt.css" />
+    <link rel="stylesheet" href="/css/cards/secret-rare.css" />
+    <link rel="stylesheet" href="/css/cards/trainer-gallery-holo.css" />
+    <link rel="stylesheet" href="/css/cards/trainer-gallery-v-regular.css" />
+    <link rel="stylesheet" href="/css/cards/trainer-gallery-v-max.css" />
+    <link rel="stylesheet" href="/css/cards/trainer-gallery-secret-rare.css" />
+    <link rel="stylesheet" href="/css/cards/shiny-rare.css" />
+    <link rel="stylesheet" href="/css/cards/shiny-v.css" />
+    <link rel="stylesheet" href="/css/cards/shiny-vmax.css" />
+    <link rel="stylesheet" href="/css/cards/swsh-pikachu.css" />
+    <link rel="stylesheet" href="/css/cards/pointer-transition.css" />
+    <link rel="stylesheet" href="/css/cards/clip-era.css" />
   </head>
   <body>
     <div id="root"></div>

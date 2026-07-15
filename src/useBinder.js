@@ -72,6 +72,7 @@ export function useBinder(userId) {
       variant: card.variant ?? null,
       card_name: card.cardName ?? null,
       language: card.language ?? 'en',
+      custom_foil_type: card.customFoilType ?? null,
     }
     await writeOrQueue({ type: 'place', slot }, () => saveCards(slot))
   }, [binderId])

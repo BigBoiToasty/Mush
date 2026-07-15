@@ -55,7 +55,7 @@ function skinButtonStyle(skinKey) {
 export const navButtonStyle = skinButtonStyle(activeSkin)
 
 export const navButtonClass =
-  'shrink-0 cursor-pointer px-4 py-2 text-base font-semibold hover:brightness-95 active:brightness-90 disabled:cursor-not-allowed disabled:opacity-40'
+  'nav-btn shrink-0 cursor-pointer font-semibold hover:brightness-95 active:brightness-90 disabled:cursor-not-allowed disabled:opacity-40'
 
 export const dangerButtonStyle = {
   ...navButtonStyle,

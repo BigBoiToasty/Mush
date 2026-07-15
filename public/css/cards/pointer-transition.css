@@ -1,0 +1,30 @@
+/*
+  Not part of simeydotme/pokemon-cards-css -- Simon's own app smooths the
+  tilt/glare by recalculating Svelte springs every frame; this project has
+  no spring library, so a CSS transition stands in instead. Transform is
+  instant while the pointer is actively moving (.interacting, added to the
+  outer .card element by holoPointer.js's pointermove handler) so tracking
+  doesn't lag the cursor, then eases back to the resting position -- slower
+  than the tracking itself -- on pointerleave.
+
+  --card-opacity (the shine/glare's opacity, base.css) needs the same
+  treatment: it's toggled 0/1 by holoPointer.js the instant the pointer
+  enters/leaves, and base.css itself sets no transition on it (Simon's app
+  fades it via spring interpolation instead). Without this, the tilt eases
+  in while the glare pops fully on/off in the same frame -- a "light switch"
+  effect that doesn't match the reference site's feel.
+*/
+.card__translater,
+.card__rotator {
+  transition: transform 1.1s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.card__shine,
+.card__glare {
+  transition: opacity 1.1s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.card.interacting .card__translater,
+.card.interacting .card__rotator {
+  transition: none;
+}

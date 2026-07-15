@@ -1,9 +1,32 @@
 import { useState, useEffect } from 'react'
 import { NavBtn, useDismiss } from './ui'
-import { pickTcgplayerEntry, cardUrl } from './cards'
+import { pickTcgplayerEntry } from './cards'
+import { useCardData } from './useCardData'
+import HoloCard from './HoloCard'
 
 const VARIANT_LABELS = { firstEdition: '1st Edition', holo: 'Holo', reverse: 'Reverse Holo', normal: 'Normal', wPromo: 'Promo Stamp' }
 const VARIANT_ORDER = ['normal', 'holo', 'reverse', 'firstEdition', 'wPromo']
+
+// Values are the literal `data-rarity` strings simeydotme/pokemon-cards-css
+// selects on (see public/css/cards/*.css) -- TCGdex doesn't track these foil
+// patterns, so this lets you pick one by hand. Left blank ("Auto"),
+// HoloCard falls back to guessFoilType() and then card.rarity.toLowerCase().
+// NOTE: the library has no distinct "galaxy" effect -- galaxy.jpg/-source.png
+// ship in the reference repo but no CSS file references them. "Galaxy Holo"
+// reuses the Cosmos effect (cosmos-holo.css) since collectors use the terms
+// interchangeably and it's the closest real match.
+const FOIL_TYPE_OPTIONS = [
+  { key: 'auto', value: '', label: 'Auto (from card rarity)' },
+  { key: 'holo', value: 'rare holo', label: 'Standard Holo' },
+  { key: 'reverse', value: 'reverse holo', label: 'Reverse Holo' },
+  { key: 'cosmos', value: 'rare holo cosmos', label: 'Cosmos Holo' },
+  { key: 'galaxy', value: 'rare holo cosmos', label: 'Galaxy Holo' },
+  { key: 'radiant', value: 'radiant rare', label: 'Radiant' },
+  { key: 'vmax', value: 'rare holo vmax', label: 'VMAX' },
+  { key: 'vstar', value: 'rare holo vstar', label: 'VSTAR' },
+  { key: 'secret', value: 'rare secret', label: 'Secret Rare' },
+  { key: 'gallery', value: 'trainer gallery rare holo', label: 'Trainer Gallery' },
+]
 // Labels for TCGplayer's own SKU key names, which differ from ours (see
 // TCGPLAYER_KEYS_BY_VARIANT in cards.js) -- used when displaying whichever
 // entry pickTcgplayerEntry actually returns.
@@ -36,38 +59,21 @@ const actionButtonStyle = {
   whiteSpace: 'nowrap',
 }
 
-export default function CardDetailPopup({ cardId, actions, onClose, ownedVariant, language = 'en' }) {
-  const [card, setCard] = useState(null)
-  const [error, setError] = useState(null)
+export default function CardDetailPopup({ cardId, actions, onClose, ownedVariant, ownedFoilType, language = 'en' }) {
+  const { card, error } = useCardData(cardId, language)
   const [selectedVariant, setSelectedVariant] = useState(null)
+  const [selectedFoilType, setSelectedFoilType] = useState(ownedFoilType ?? '')
   const [zoomed, setZoomed] = useState(false)
   const onBackdropClick = useDismiss(onClose)
 
+  // Seeds the pickers once per card load: view mode starts on whatever's
+  // already owned so "change variant/foil" doesn't silently reset it first.
   useEffect(() => {
-    let cancelled = false
-    setCard(null)
-    setError(null)
-    fetch(cardUrl(language, cardId))
-      .then((response) => {
-        if (!response.ok) throw new Error('Failed to load card')
-        return response.json()
-      })
-      .then((data) => {
-        if (!cancelled) {
-          setCard(data)
-          // View mode starts the picker on whatever's already owned so
-          // "change variant" doesn't silently reset it to the default first.
-          setSelectedVariant(ownedVariant ?? defaultVariant(data))
-        }
-      })
-      .catch((err) => {
-        console.error('Card detail error:', err)
-        if (!cancelled) setError("Couldn't load details")
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [cardId, language])
+    if (!card) return
+    setSelectedVariant(ownedVariant ?? defaultVariant(card))
+    setSelectedFoilType(ownedFoilType ?? '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [card])
 
   const variantKeys = trueVariantKeys(card)
   // selectedVariant is seeded from ownedVariant (view mode) or the picker's
@@ -77,16 +83,16 @@ export default function CardDetailPopup({ cardId, actions, onClose, ownedVariant
   return (
     <div className="card-detail-overlay" onClick={onBackdropClick}>
       <div className="card-detail-panel">
-        {error && <p className="card-search-error">{error}</p>}
+        {error && <p className="card-search-error">Couldn't load details</p>}
         {!error && !card && <p>Loading...</p>}
         {card && (
           <>
-            <img
+            <div
               className={`card-detail-image${zoomed ? ' card-detail-image--zoomed' : ''}`}
-              src={`${card.image}/high.webp`}
-              alt={card.name}
               onClick={() => setZoomed((z) => !z)}
-            />
+            >
+              <HoloCard card={card} customFoilType={selectedFoilType || null} ownedVariant={selectedVariant} />
+            </div>
             <div className="card-detail-info">
               <h2>{card.name}</h2>
 
@@ -107,7 +113,7 @@ export default function CardDetailPopup({ cardId, actions, onClose, ownedVariant
                 )}
                 {/* Shown in both modes: "add" picks the variant to place, "view"
                     lets you correct/change the variant of a card already placed
-                    (selectedVariant starts at ownedVariant, see fetch effect). */}
+                    (selectedVariant starts at ownedVariant, see the seed effect). */}
                 {variantKeys.length > 1 && (
                   <div className="card-detail-variant-picker">
                     {variantKeys.map((key) => (
@@ -123,6 +129,20 @@ export default function CardDetailPopup({ cardId, actions, onClose, ownedVariant
                     ))}
                   </div>
                 )}
+                {/* Overrides the holo effect TCGdex can't tell us (cosmos,
+                    galaxy, vmax, etc -- see FOIL_TYPE_OPTIONS above). */}
+                <div className="card-detail-section card-detail-foil-picker">
+                  <label htmlFor="foil-effect-select">Foil effect</label>
+                  <select
+                    id="foil-effect-select"
+                    value={selectedFoilType}
+                    onChange={(e) => setSelectedFoilType(e.target.value)}
+                  >
+                    {FOIL_TYPE_OPTIONS.map((opt) => (
+                      <option key={opt.key} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
                 {tcgplayerEntry && (
                   <p>
                     TCGplayer: ${tcgplayerEntry[1].marketPrice.toFixed(2)} ({TCGPLAYER_LABELS[tcgplayerEntry[0]] || tcgplayerEntry[0]})
@@ -139,7 +159,7 @@ export default function CardDetailPopup({ cardId, actions, onClose, ownedVariant
               variant to choose between. Padding/font shrink with viewport
               width so all buttons stay on one row instead of wrapping. */}
           {card && actions?.filter((a) => !a.requiresVariantChoice || variantKeys.length > 1).map((a) => (
-            <NavBtn key={a.label} danger={a.danger} onClick={() => a.onClick(selectedVariant)} style={actionButtonStyle}>
+            <NavBtn key={a.label} danger={a.danger} onClick={() => a.onClick(selectedVariant, selectedFoilType || null)} style={actionButtonStyle}>
               {a.label}
             </NavBtn>
           ))}

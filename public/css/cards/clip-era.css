@@ -1,0 +1,41 @@
+/*
+  Not part of simeydotme/pokemon-cards-css -- overrides regular-holo.css's
+  and cosmos-holo.css's clip-path for [data-clip-era="loose"] cards (set by
+  guessFoilType/HoloCard.jsx, see its comment for exactly which sets count --
+  currently just POP promo series) with the wider --clip-loose/
+  --clip-trainer-loose values from defaults.css. The extra
+  [data-clip-era="loose"] attribute makes these selectors more specific than
+  the vendored ones, so this wins regardless of <link> order.
+
+  Everything else (data-clip-era="default", which includes Base/Neo/Gym/EX/DP
+  as well as real modern Sword & Shield/Scarlet & Violet-era cards) gets NO
+  override here -- the vendored --clip already fits them (confirmed against
+  two live cards, Sableye/sv02 and Salamence ex/ex16). An earlier version of
+  this widened the clip for a whole "vintage" bucket including those eras on
+  the assumption they shared POP's thin border, which broke cards that
+  already looked right -- see foilHeuristic.js for why that got narrowed
+  back down to just POP.
+
+  Scope: only the plain rare-holo/cosmos family. Deliberately NOT covering
+  reverse-holo.css here -- its clip vars (--clip-invert etc) are inverted
+  polygons (foil everything EXCEPT the art window), and widening those
+  correctly needs its own recalibration against real POP-era reverse-holo
+  cards, not just re-using these inset() values. Also not covering the
+  --clip-stage (evolution-line notch) shape for the same reason -- see the
+  defaults.css comment.
+*/
+.card[data-clip-era="loose"][data-rarity="rare holo"] .card__shine,
+.card[data-clip-era="loose"][data-rarity="rare holo"] .card__glare:after,
+.card[data-clip-era="loose"][data-rarity="rare holo cosmos"] .card__shine,
+.card[data-clip-era="loose"][data-rarity="rare holo cosmos"] .card__glare:after {
+  clip-path: var(--clip-loose);
+}
+
+.card[data-clip-era="loose"][data-rarity="rare holo"][data-subtypes^="supporter"] .card__shine,
+.card[data-clip-era="loose"][data-rarity="rare holo"][data-subtypes^="supporter"] .card__glare:after,
+.card[data-clip-era="loose"][data-rarity="rare holo"][data-subtypes^="item"] .card__shine,
+.card[data-clip-era="loose"][data-rarity="rare holo"][data-subtypes^="item"] .card__glare:after,
+.card[data-clip-era="loose"][data-rarity="rare holo cosmos"][data-subtypes^="supporter"] .card__shine,
+.card[data-clip-era="loose"][data-rarity="rare holo cosmos"][data-subtypes^="supporter"] .card__glare:after {
+  clip-path: var(--clip-trainer-loose);
+}

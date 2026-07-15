@@ -16,11 +16,11 @@ const escapeLike = (query) => query.replace(/[\\%_]/g, '\\$&')
 
 // The same physical card has a different ID per language database, so
 // anything keyed by card must be keyed by (language, card_id).
-const cardKey = (language, cardId) => `${language}|${cardId}`
+export const cardKey = (language, cardId) => `${language}|${cardId}`
 
 // One card's tcgdex JSON, or null on any failure -- every caller is a
 // best-effort path (pricing, rarity, backfill) that degrades gracefully.
-async function fetchCard(language, cardId) {
+export async function fetchCard(language, cardId) {
   try {
     const response = await fetch(cardUrl(language, cardId))
     return response.ok ? await response.json() : null

@@ -43,7 +43,16 @@
     box-shadow: 0 0 0 2px #3b9dff, 0 0 12px 3px rgba(59, 157, 255, 0.85);
 }
 
-.box button {
+/* Direct-child combinator, not descendant: a HoloCard's .card__rotator
+   button and its <img> sit 2-3 levels deep inside .box, and being an
+   equal-or-higher-specificity rule loaded after base.css, a descendant
+   ".box button"/".box img" here would win the cascade and stomp
+   .card__rotator's `display: grid` back to `block` -- breaking the CSS
+   Grid stacking base.css uses to overlay .card__shine/.card__glare on the
+   artwork. Scoping to `>` keeps this only for the empty-slot button and the
+   plain-image loading/error fallback, both of which are direct children of
+   .box. */
+.box > button {
     width: 100%;
     height: 100%;
     padding: 0;
@@ -53,11 +62,30 @@
     display: block;
 }
 
-.box img {
+.box > img,
+.box > button > img {
     width: 100%;
     height: 100%;
     object-fit: cover;
     display: block;
+}
+
+/* Loading placeholder shown by FadeImg while a card image is still decoding,
+   and by each slot in the binder grid while a page's slots are still unknown
+   (BinderGrid). Specificity note: inside a HoloCard, this sits under
+   .card__rotator, whose `.card__rotator *` rule (base.css) forces
+   display:grid on every descendant -- this rule loads after base.css in
+   index.html, so its `display: flex` wins the cascade and actually centers
+   the text instead of leaving it as an unstyled grid item. */
+.loading-box {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #555;
+    font-size: 0.75rem;
+    text-align: center;
 }
 
 
@@ -265,12 +293,12 @@
     gap: 12px;
 }
 
+/* Wraps HoloCard's .card -- .card is a plain block div (no intrinsic
+   width), so it fills this wrapper's width; aspect-ratio here just reserves
+   layout space before the card's own (var(--card-aspect)) applies. */
 .card-detail-image {
     width: 200px;
     aspect-ratio: 2.5 / 3.5;
-    object-fit: cover;
-    border: 2px solid #0a0a0a;
-    border-radius: 4px;
     cursor: zoom-in;
     transition: width 0.25s ease;
 }
@@ -313,6 +341,30 @@
     display: flex;
     align-items: center;
     gap: 4px;
+    cursor: pointer;
+}
+
+.card-detail-foil-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-start;
+}
+
+.card-detail-foil-picker label {
+    font-size: 0.9rem;
+    font-weight: bold;
+    opacity: 0.85;
+}
+
+.card-detail-foil-picker select {
+    background: #f0f0f0;
+    color: #0a0a0a;
+    border: 2px solid #0a0a0a;
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-size: 1rem;
+    min-width: 220px;
     cursor: pointer;
 }
 

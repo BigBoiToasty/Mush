@@ -27,6 +27,7 @@ function slotToCard(slot) {
     variant: slot.variant,
     cardName: slot.card_name,
     language: slot.language,
+    customFoilType: slot.custom_foil_type,
   }
 }
 
@@ -63,8 +64,10 @@ export default function BinderPage({ userId }) {
   // Survives a remount (alt-tab away/back can retrigger auth or reload the
   // backgrounded tab) so the user doesn't get bounced back to page 1.
   const [activePage, setActivePage] = useState(() => Number(sessionStorage.getItem('mush:activePage')) || 1)
-  const [leftSlots, setLeftSlots] = useState([])
-  const [rightSlots, setRightSlots] = useState([])
+  // null means "not yet loaded" (distinct from a confirmed-empty []),
+  // so BinderGrid can show shimmer placeholders instead of empty-slot buttons.
+  const [leftSlots, setLeftSlots] = useState(null)
+  const [rightSlots, setRightSlots] = useState(null)
   // Only one full-screen overlay can be open at a time:
   // 'search' | 'find' | 'switcher' | 'stats' | 'share' | 'completion' | 'delete' | 'offlineInfo' | null
   const [overlay, setOverlay] = useState(null)
@@ -80,6 +83,8 @@ export default function BinderPage({ userId }) {
   const [importing, setImporting] = useState(false)
   const fileInputRef = useRef(null)
   const loadSeq = useRef(0)
+  const activePageRef = useRef(activePage)
+  activePageRef.current = activePage
   const swipeHandlers = usePageSwipe(setActivePage)
 
   const reloadPages = useCallback(async () => {
@@ -114,16 +119,21 @@ export default function BinderPage({ userId }) {
     sessionStorage.setItem('mush:activePage', String(activePage))
   }, [activePage])
 
-  // Once per mount, when online, cache the whole collection for offline viewing.
+  // Once per binder, when online, cache the whole collection for offline viewing.
   // offlineReady flips once every card image has actually been fetched, so it's
-  // safe to tell the user they can go offline and still scroll/search.
+  // safe to tell the user they can go offline and still scroll/search. The
+  // currently open spread is passed as `priority` so its images are fetched
+  // first (see syncAllForOffline) -- the visible page shows up fast, and
+  // everything else loads behind it while no one's watching. Reads activePage
+  // from a ref (not a dependency) so flipping pages doesn't restart the sync.
   useEffect(() => {
-    if (!navigator.onLine) return
+    if (!binderId || !navigator.onLine) return
     let cancelled = false
     setOfflineReady(false)
-    syncAllForOffline(userId).then(() => { if (!cancelled) setOfflineReady(true) })
+    syncAllForOffline(userId, { binderId, page: activePageRef.current })
+      .then(() => { if (!cancelled) setOfflineReady(true) })
     return () => { cancelled = true }
-  }, [userId])
+  }, [userId, binderId])
 
   // Replay writes queued while offline -- on reconnect, and once on mount to
   // catch anything left over from a previous session.
@@ -235,10 +245,13 @@ export default function BinderPage({ userId }) {
   }
 
   // placeCardAt upserts on (page, slot), so re-placing the same card with a
-  // new variant simply overwrites the existing row -- no separate update path.
-  async function handleChangeVariant(variant) {
-    if (!viewingSlot || variant === viewingSlot.card.variant) return setViewingSlot(null)
-    await placeCardAt(viewingSlot.pageNumber, viewingSlot.slotNumber, { ...viewingSlot.card, variant })
+  // new variant/foil type simply overwrites the existing row -- no separate update path.
+  async function handleChangeVariant(variant, customFoilType) {
+    if (!viewingSlot) return
+    const unchanged = variant === viewingSlot.card.variant
+      && customFoilType === (viewingSlot.card.customFoilType ?? null)
+    if (unchanged) return setViewingSlot(null)
+    await placeCardAt(viewingSlot.pageNumber, viewingSlot.slotNumber, { ...viewingSlot.card, variant, customFoilType })
     setViewingSlot(null)
   }
 
@@ -457,6 +470,7 @@ export default function BinderPage({ userId }) {
           cardId={viewingSlot.card.cardId}
           language={viewingSlot.card.language}
           ownedVariant={viewingSlot.card.variant}
+          ownedFoilType={viewingSlot.card.customFoilType}
           onClose={() => setViewingSlot(null)}
           actions={[
             { label: 'Save Variant', onClick: handleChangeVariant, requiresVariantChoice: true },

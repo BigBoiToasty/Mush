@@ -75,8 +75,32 @@ export const BUTTON_SKINS = {
   obsidian: { name: 'Obsidian', border: ['#000000', '#2a2a2a', '#4a4a4a'],   fill: '#1a1a1a', text: '#e8e8e8' },
 }
 
+// Mixes a hex color toward black (percent < 0) or white (percent > 0) by
+// the given fraction -- lets one picked border color stand in for the
+// presets' 3 hand-picked gradient stops (dark outer ring to light inner ring).
+function shadeColor(hex, percent) {
+  const num = parseInt(hex.slice(1), 16)
+  const r = (num >> 16) & 0xff, g = (num >> 8) & 0xff, b = num & 0xff
+  const target = percent < 0 ? 0 : 255
+  const p = Math.abs(percent)
+  const mix = (c) => Math.round((target - c) * p + c)
+  return `#${[mix(r), mix(g), mix(b)].map((c) => c.toString(16).padStart(2, '0')).join('')}`
+}
+
 const skinFrameCache = {}
-export function getButtonSkinFrame(skinKey) {
+// customColors is only used when skinKey === 'custom': the user's own
+// border/fill picks. The border is a single color, expanded into a 3-stop
+// dark-to-light gradient (via shadeColor) so custom skins get the same
+// gradient ring look as the presets instead of a flat border.
+export function getButtonSkinFrame(skinKey, customColors) {
+  if (skinKey === 'custom' && customColors) {
+    const cacheKey = `custom:${customColors.border}:${customColors.fill}`
+    if (!skinFrameCache[cacheKey]) {
+      const borderGradient = [shadeColor(customColors.border, -0.4), customColors.border, shadeColor(customColors.border, 0.4)]
+      skinFrameCache[cacheKey] = pixelFrame(0, borderGradient, customColors.fill)
+    }
+    return skinFrameCache[cacheKey]
+  }
   const skin = BUTTON_SKINS[skinKey] || BUTTON_SKINS.tide
   if (!skinFrameCache[skinKey]) {
     skinFrameCache[skinKey] = pixelFrame(0, skin.border, skin.fill)

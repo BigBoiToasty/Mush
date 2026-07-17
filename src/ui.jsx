@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useSyncExternalStore } from 'react'
 import { theme } from './theme'
 import { TIDE_BG, FRAME_SHARP_DANGER, BUTTON_SKINS, getButtonSkinFrame } from './pixelArt'
+import { setButtonPrefs } from './cards'
 
 // Shared UI primitives: the pixel-frame button, the overlay panel scaffold,
 // the binder page-spread navigator, and the load-on-mount hook every overlay
@@ -9,39 +10,79 @@ import { TIDE_BG, FRAME_SHARP_DANGER, BUTTON_SKINS, getButtonSkinFrame } from '.
 const t = theme
 
 export const fontBase = { fontFamily: t.font.family, letterSpacing: t.font.letterSpacing }
-export const pageBg = { background: TIDE_BG, backgroundSize: 'cover', imageRendering: 'pixelated' }
+// backgroundImage (not the `background` shorthand) so switching binders
+// between this and an uploaded binderPageBg() style never mixes shorthand
+// and longhand background properties on the same element -- React warns
+// about that combination and it can leave stale styles behind.
+export const pageBg = { backgroundImage: TIDE_BG, backgroundSize: 'cover', imageRendering: 'pixelated' }
 
-// Active NavBtn skin, persisted so the choice survives reload. A tiny pub/sub
-// store (not context) so NavBtn can read it without every call site needing
-// a provider -- buttons are used from many independent overlay modules.
+// The per-binder background: an uploaded image (cover-fit, cropped to fill,
+// no letterboxing) when one is set, otherwise the app's default tide pattern.
+export function binderPageBg(url) {
+  if (!url) return pageBg
+  return { backgroundImage: `url(${url})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+}
+
+// Active NavBtn skin, persisted so the choice survives reload and (via
+// initButtonSkinFromProfile) syncs across devices through the profiles
+// table. A tiny pub/sub store (not context) so NavBtn can read it without
+// every call site needing a provider -- buttons are used from many
+// independent overlay modules.
 const SKIN_KEY = 'mush:buttonSkin'
-let activeSkin = localStorage.getItem(SKIN_KEY) in BUTTON_SKINS ? localStorage.getItem(SKIN_KEY) : 'tide'
+const CUSTOM_KEY = 'mush:buttonCustomColors'
+const storedSkin = localStorage.getItem(SKIN_KEY)
+let activeSkin = (storedSkin in BUTTON_SKINS || storedSkin === 'custom') ? storedSkin : 'tide'
+let activeCustomColors = null
+try { activeCustomColors = JSON.parse(localStorage.getItem(CUSTOM_KEY)) } catch { activeCustomColors = null }
+if (activeSkin === 'custom' && !activeCustomColors) activeSkin = 'tide'
+// useSyncExternalStore's snapshot must be reference-stable between changes --
+// a fresh object literal returned from getSnapshot() looks like a change on
+// every render and causes an infinite update loop. Cache it here and only
+// replace it when setButtonSkin actually runs.
+let skinSnapshot = { skin: activeSkin, customColors: activeCustomColors }
 const skinListeners = new Set()
 
-export function setButtonSkin(skinKey) {
-  if (!(skinKey in BUTTON_SKINS)) return
+export function setButtonSkin(skinKey, customColors = null) {
+  if (skinKey === 'custom' && !customColors) return
+  if (skinKey !== 'custom' && !(skinKey in BUTTON_SKINS)) return
   activeSkin = skinKey
+  activeCustomColors = skinKey === 'custom' ? customColors : null
+  skinSnapshot = { skin: activeSkin, customColors: activeCustomColors }
   localStorage.setItem(SKIN_KEY, skinKey)
+  if (activeCustomColors) localStorage.setItem(CUSTOM_KEY, JSON.stringify(activeCustomColors))
+  else localStorage.removeItem(CUSTOM_KEY)
   skinListeners.forEach((fn) => fn())
+}
+
+// Called once at login with the fetched profile row (see App.jsx), so a skin
+// synced from another device applies without the user having to re-pick it.
+export function initButtonSkinFromProfile(profile) {
+  if (!profile?.button_skin) return
+  if (profile.button_skin === 'custom' && profile.button_border) {
+    setButtonSkin('custom', { border: profile.button_border, fill: profile.button_fill, text: profile.button_text })
+  } else if (profile.button_skin in BUTTON_SKINS) {
+    setButtonSkin(profile.button_skin)
+  }
 }
 
 function useButtonSkin() {
   return useSyncExternalStore(
     (onChange) => { skinListeners.add(onChange); return () => skinListeners.delete(onChange) },
-    () => activeSkin,
+    () => skinSnapshot,
   )
 }
 
-function skinButtonStyle(skinKey) {
-  const skin = BUTTON_SKINS[skinKey] || BUTTON_SKINS.tide
+function skinButtonStyle(skinKey, customColors) {
+  const isCustom = skinKey === 'custom' && customColors
+  const text = isCustom ? customColors.text : (BUTTON_SKINS[skinKey] || BUTTON_SKINS.tide).text
   return {
     fontFamily: t.font.family,
     letterSpacing: t.font.letterSpacing,
-    color: skin.text,
+    color: text,
     backgroundColor: t.colors.inputCorner,
     borderStyle: 'solid',
     borderWidth: '8px',
-    borderImageSource: getButtonSkinFrame(skinKey),
+    borderImageSource: getButtonSkinFrame(skinKey, customColors),
     borderImageSlice: `${t.frame.slice} fill`,
     borderImageRepeat: 'stretch',
     imageRendering: 'pixelated',
@@ -64,13 +105,13 @@ export const dangerButtonStyle = {
   borderImageSource: FRAME_SHARP_DANGER,
 }
 
-export function NavBtn({ danger, style, skin, ...props }) {
-  const activeSkin = useButtonSkin()
+export function NavBtn({ danger, style, skin, customColors: forcedColors, ...props }) {
+  const { skin: activeSkin, customColors: liveColors } = useButtonSkin()
   const base = skin
-    ? skinButtonStyle(skin)
+    ? skinButtonStyle(skin, forcedColors)
     : danger
-      ? { ...skinButtonStyle(activeSkin), color: '#5c0f0a', backgroundColor: '#f6d9d6', borderImageSource: FRAME_SHARP_DANGER }
-      : skinButtonStyle(activeSkin)
+      ? { ...skinButtonStyle(activeSkin, liveColors), color: '#5c0f0a', backgroundColor: '#f6d9d6', borderImageSource: FRAME_SHARP_DANGER }
+      : skinButtonStyle(activeSkin, liveColors)
   return (
     <button
       type="button"
@@ -81,10 +122,25 @@ export function NavBtn({ danger, style, skin, ...props }) {
   )
 }
 
-// One row per skin in the style picker; each swatch renders as a real NavBtn
-// forced into that skin, so the preview is exactly what picking it produces.
-export function ButtonSkinPicker({ onClose }) {
-  const activeSkin = useButtonSkin()
+// One row per preset skin, plus a "Custom" row with color pickers; each
+// preview renders as a real NavBtn forced into that skin/colors, so the
+// preview is exactly what picking it produces.
+export function ButtonSkinPicker({ userId, onClose }) {
+  const { skin: activeSkin, customColors } = useButtonSkin()
+  const [customDraft, setCustomDraft] = useState(
+    customColors ?? { border: '#3f6f9c', fill: '#d7e6f2', text: '#081426' },
+  )
+
+  function applySkin(skinKey, colors = null) {
+    setButtonSkin(skinKey, colors)
+    setButtonPrefs(userId, {
+      skin: skinKey,
+      border: colors?.border ?? null,
+      fill: colors?.fill ?? null,
+      text: colors?.text ?? null,
+    }).catch(() => {}) // best-effort sync; the local pick still applies if this fails
+  }
+
   return (
     <OverlayPanel title="Button Style" onClose={onClose}>
       <div className="flex flex-col gap-2">
@@ -92,12 +148,49 @@ export function ButtonSkinPicker({ onClose }) {
           <NavBtn
             key={key}
             skin={key}
-            onClick={() => setButtonSkin(key)}
+            onClick={() => applySkin(key)}
             style={key === activeSkin ? { boxShadow: '0 0 0 3px #ffffff, 0 3px 10px rgba(0,0,0,0.6)' } : undefined}
           >
             {s.name}{key === activeSkin ? ' (current)' : ''}
           </NavBtn>
         ))}
+
+        <div className="flex flex-col gap-2 border-t border-white/20 pt-2">
+          <NavBtn
+            skin="custom"
+            customColors={customDraft}
+            onClick={() => applySkin('custom', customDraft)}
+            style={activeSkin === 'custom' ? { boxShadow: '0 0 0 3px #ffffff, 0 3px 10px rgba(0,0,0,0.6)' } : undefined}
+          >
+            Custom{activeSkin === 'custom' ? ' (current)' : ''}
+          </NavBtn>
+          <div className="flex items-center gap-3 text-sm text-white">
+            <label className="flex items-center gap-1">
+              Border
+              <input
+                type="color"
+                value={customDraft.border}
+                onChange={(e) => setCustomDraft((d) => ({ ...d, border: e.target.value }))}
+              />
+            </label>
+            <label className="flex items-center gap-1">
+              Fill
+              <input
+                type="color"
+                value={customDraft.fill}
+                onChange={(e) => setCustomDraft((d) => ({ ...d, fill: e.target.value }))}
+              />
+            </label>
+            <label className="flex items-center gap-1">
+              Text
+              <input
+                type="color"
+                value={customDraft.text}
+                onChange={(e) => setCustomDraft((d) => ({ ...d, text: e.target.value }))}
+              />
+            </label>
+          </div>
+        </div>
       </div>
     </OverlayPanel>
   )

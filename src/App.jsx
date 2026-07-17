@@ -4,7 +4,7 @@ import LoginCard from './LoginCard'
 import UsernamePrompt from './UsernamePrompt'
 import BinderPage from './BinderPage'
 import { cacheProfile, readProfile } from './offlineCache'
-import { LoadingScreen } from './ui'
+import { LoadingScreen, initButtonSkinFromProfile } from './ui'
 
 // supabase-js throws instead of returning an error when getSession() tries a
 // background token refresh and the network is down. Read its own persisted
@@ -28,7 +28,7 @@ export default function App() {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('username')
+        .select('username, button_skin, button_border, button_fill, button_text')
         .eq('user_id', userId)
         .maybeSingle()
 
@@ -42,6 +42,7 @@ export default function App() {
       if (data) {
         cacheProfile(userId, data)
         setProfile(data)
+        initButtonSkinFromProfile(data)
         return
       }
 
@@ -65,10 +66,11 @@ export default function App() {
       // Fetch the now-existing profile (just inserted, or already existed via 23505 race)
       const { data: created } = await supabase
         .from('profiles')
-        .select('username')
+        .select('username, button_skin, button_border, button_fill, button_text')
         .eq('user_id', userId)
         .maybeSingle()
       setProfile(created ?? null)
+      if (created) initButtonSkinFromProfile(created)
     } catch (err) {
       console.error('Unexpected error in fetchProfile:', err)
     }

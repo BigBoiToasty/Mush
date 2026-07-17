@@ -12,8 +12,9 @@ import ShareOverlay from './ShareOverlay'
 import SetCompletionOverlay from './SetCompletionOverlay'
 import OfflineReadyOverlay from './OfflineReadyOverlay'
 import notebookBg from './assets/binder-notebook.png'
-import { fontBase, pageBg, NavBtn, PageNav, OverlayPanel, ButtonSkinPicker, DropdownMenu, spreadStartForPage, usePageSwipe, LoadingScreen } from './ui'
-import { planMove, getAllBinderSlots, slotsToCsv, csvToSlots, importSlots } from './cards'
+import BackgroundPicker from './BackgroundPicker'
+import { fontBase, pageBg, binderPageBg, NavBtn, PageNav, OverlayPanel, ButtonSkinPicker, DropdownMenu, spreadStartForPage, usePageSwipe, LoadingScreen } from './ui'
+import { planMove, getAllBinderSlots, slotsToCsv, csvToSlots, importSlots, getBinderBackground } from './cards'
 import { syncAllForOffline } from './offlineSync'
 import { readSlots } from './offlineCache'
 import { flushQueue } from './offlineQueue'
@@ -50,6 +51,7 @@ const MENU_ITEMS = [
   ['Share Binder', 'share'],
   ['Set Completion', 'completion'],
   ['Button Style', 'buttonStyle'],
+  ['Binder Background', 'background'],
   ['Export CSV', 'export'],
   ['Import CSV', 'import'],
   ['Delete Binder', 'delete', true],
@@ -68,6 +70,7 @@ export default function BinderPage({ userId }) {
   // so BinderGrid can show shimmer placeholders instead of empty-slot buttons.
   const [leftSlots, setLeftSlots] = useState(null)
   const [rightSlots, setRightSlots] = useState(null)
+  const [backgroundUrl, setBackgroundUrl] = useState(null)
   // Only one full-screen overlay can be open at a time:
   // 'search' | 'find' | 'switcher' | 'stats' | 'share' | 'completion' | 'delete' | 'offlineInfo' | null
   const [overlay, setOverlay] = useState(null)
@@ -114,6 +117,13 @@ export default function BinderPage({ userId }) {
   useEffect(() => {
     reloadPages()
   }, [reloadPages])
+
+  useEffect(() => {
+    if (!binderId) return
+    let cancelled = false
+    getBinderBackground(binderId).then((url) => { if (!cancelled) setBackgroundUrl(url) })
+    return () => { cancelled = true }
+  }, [binderId])
 
   useEffect(() => {
     sessionStorage.setItem('mush:activePage', String(activePage))
@@ -324,7 +334,7 @@ export default function BinderPage({ userId }) {
   return (
     <div
       className="flex h-screen flex-col items-center gap-4 overflow-hidden p-4"
-      style={{ ...fontBase, ...pageBg }}
+      style={{ ...fontBase, ...binderPageBg(backgroundUrl) }}
     >
       <div className="grid w-full shrink-0 grid-cols-3 items-center px-2">
         <div className="justify-self-start">
@@ -533,7 +543,15 @@ export default function BinderPage({ userId }) {
       )}
 
       {overlay === 'offlineInfo' && <OfflineReadyOverlay onClose={() => setOverlay(null)} />}
-      {overlay === 'buttonStyle' && <ButtonSkinPicker onClose={() => setOverlay(null)} />}
+      {overlay === 'buttonStyle' && <ButtonSkinPicker userId={userId} onClose={() => setOverlay(null)} />}
+      {overlay === 'background' && (
+        <BackgroundPicker
+          userId={userId}
+          binderId={binderId}
+          onChanged={setBackgroundUrl}
+          onClose={() => setOverlay(null)}
+        />
+      )}
 
       <input
         ref={fileInputRef}

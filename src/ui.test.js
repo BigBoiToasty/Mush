@@ -55,4 +55,48 @@ describe('button skin persistence', () => {
     setButtonSkin('bogus')
     expect(localStorage.getItem('mush:buttonSkin')).toBe('kelp')
   })
+
+  it('setButtonSkin with a custom skin stores the picked colors', async () => {
+    const { setButtonSkin } = await import('./ui')
+    const colors = { border: '#ff0000', fill: '#ffffff', text: '#000000' }
+    setButtonSkin('custom', colors)
+    expect(localStorage.getItem('mush:buttonSkin')).toBe('custom')
+    expect(JSON.parse(localStorage.getItem('mush:buttonCustomColors'))).toEqual(colors)
+  })
+
+  it('ignores a custom skin with no colors provided', async () => {
+    const { setButtonSkin } = await import('./ui')
+    setButtonSkin('kelp')
+    setButtonSkin('custom')
+    expect(localStorage.getItem('mush:buttonSkin')).toBe('kelp')
+  })
+
+  it('initButtonSkinFromProfile applies a synced custom skin', async () => {
+    const { initButtonSkinFromProfile } = await import('./ui')
+    initButtonSkinFromProfile({ button_skin: 'custom', button_border: '#111111', button_fill: '#222222', button_text: '#333333' })
+    expect(localStorage.getItem('mush:buttonSkin')).toBe('custom')
+    expect(JSON.parse(localStorage.getItem('mush:buttonCustomColors'))).toEqual({ border: '#111111', fill: '#222222', text: '#333333' })
+  })
+
+  it('initButtonSkinFromProfile applies a synced preset skin', async () => {
+    const { initButtonSkinFromProfile } = await import('./ui')
+    initButtonSkinFromProfile({ button_skin: 'abyss' })
+    expect(localStorage.getItem('mush:buttonSkin')).toBe('abyss')
+  })
+})
+
+describe('binderPageBg', () => {
+  it('returns the default pattern when no url is given', async () => {
+    const { binderPageBg, pageBg } = await import('./ui')
+    expect(binderPageBg(null)).toEqual(pageBg)
+  })
+
+  it('returns a cover-fit background image style when a url is given', async () => {
+    const { binderPageBg } = await import('./ui')
+    expect(binderPageBg('https://example.com/bg.png')).toEqual({
+      backgroundImage: 'url(https://example.com/bg.png)',
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+    })
+  })
 })

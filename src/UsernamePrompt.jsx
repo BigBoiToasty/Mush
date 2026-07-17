@@ -1,5 +1,23 @@
 import { useState } from 'react'
 import { supabase } from './supabaseClient'
+import { theme } from './theme'
+import { TIDE_BG, FRAME } from './pixelArt'
+
+const t = theme
+const fontBase = { fontFamily: t.font.family, letterSpacing: t.font.letterSpacing }
+
+const frameBox = {
+  ...fontBase,
+  color: t.colors.inputText,
+  backgroundColor: t.colors.inputCorner,
+  borderStyle: 'solid',
+  borderWidth: t.frame.width,
+  borderImageSource: FRAME,
+  borderImageSlice: `${t.frame.slice} fill`,
+  borderImageRepeat: 'stretch',
+  imageRendering: 'pixelated',
+  outline: 'none',
+}
 
 export default function UsernamePrompt({ session, onUsernameSet }) {
   const [username, setUsername] = useState('')
@@ -24,22 +42,30 @@ export default function UsernamePrompt({ session, onUsernameSet }) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4 w-72">
-        <h2 className="text-xl font-bold text-center">Pick a username</h2>
+    <div
+      className="flex min-h-screen items-center justify-center"
+      style={{ background: TIDE_BG, backgroundSize: 'cover', imageRendering: 'pixelated' }}
+    >
+      <form onSubmit={handleSubmit} className="@container flex flex-col gap-[3cqw] w-[min(420px,88vw)] p-[6cqw]" style={frameBox}>
+        <h2 style={{ ...fontBase, color: t.colors.label, fontSize: '5cqw' }} className="text-center">
+          Pick a username
+        </h2>
         <input
           type="text"
           value={username}
           onChange={e => setUsername(e.target.value)}
           placeholder="your username"
-          className="border border-gray-400 px-3 py-2 rounded"
           autoFocus
+          style={{ ...frameBox, fontSize: '3.2cqw', padding: '3cqw', backgroundColor: t.colors.inputFill }}
         />
-        {error && <p className="text-red-600 text-sm">{error}</p>}
+        {error && (
+          <p style={{ ...fontBase, color: '#cc0000', fontSize: '2.6cqw', margin: 0 }}>{error}</p>
+        )}
         <button
           type="submit"
           disabled={loading || !username.trim()}
-          className="rounded border border-gray-800 px-4 py-2 hover:bg-gray-100 disabled:opacity-50"
+          style={{ ...frameBox, fontSize: '3.2cqw', padding: '3cqw', cursor: 'pointer' }}
+          className="hover:brightness-110 disabled:opacity-50 disabled:cursor-default"
         >
           {loading ? '...' : 'Continue'}
         </button>

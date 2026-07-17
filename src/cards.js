@@ -412,6 +412,51 @@ export async function renameBinders(binderId, name) {
   }
 }
 
+export async function setButtonPrefs(userId, { skin, border, fill, text }) {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ button_skin: skin, button_border: border, button_fill: fill, button_text: text })
+    .eq('user_id', userId)
+
+  if (error) console.error('Button prefs save error:', error)
+}
+
+export async function setBinderBackground(binderId, url) {
+  const { error } = await supabase
+    .from('binders')
+    .update({ background_image_url: url })
+    .eq('id', binderId)
+
+  if (error) throw error
+}
+
+export async function getBinderBackground(binderId) {
+  const { data, error } = await supabase
+    .from('binders')
+    .select('background_image_url')
+    .eq('id', binderId)
+    .maybeSingle()
+
+  if (error || !data) return null
+  return data.background_image_url
+}
+
+// One image per binder: the fixed `${userId}/${binderId}.{ext}` path means a
+// re-upload overwrites the previous file in place, so there's nothing to
+// garbage-collect when a user replaces their background.
+export async function uploadBinderBackground(userId, binderId, file) {
+  const ext = file.name.split('.').pop()
+  const path = `${userId}/${binderId}.${ext}`
+  const { error: uploadError } = await supabase.storage
+    .from('binder-backgrounds')
+    .upload(path, file, { upsert: true })
+  if (uploadError) throw uploadError
+
+  const { data } = supabase.storage.from('binder-backgrounds').getPublicUrl(path)
+  await setBinderBackground(binderId, data.publicUrl)
+  return data.publicUrl
+}
+
 // Pure: CSV of a binder's slots, sorted by page/slot. Fields are quoted per
 // RFC 4180 so card names with commas or quotes survive a spreadsheet import.
 // card_image is included so the file is a restorable backup (csvToSlots),

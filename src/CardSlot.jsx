@@ -1,12 +1,13 @@
 import { useCardData } from './useCardData'
 import HoloCard from './HoloCard'
+import LoadingDots from './LoadingDots'
 import FadeImg from './FadeImg'
 
 export default function CardSlot({ slot, isHeld, onChoose, onView }) {
   const boxClass = isHeld ? 'box box-held' : 'box'
   // Hooks must run unconditionally -- called with nulls when there's no slot,
   // useCardData treats a null cardId as a no-op (see its `key` guard).
-  const { card } = useCardData(slot?.card_id, slot?.language)
+  const { card, error } = useCardData(slot?.card_id, slot?.language)
 
   if (!slot) {
     if (!onChoose) return <div className={boxClass} />
@@ -19,10 +20,21 @@ export default function CardSlot({ slot, isHeld, onChoose, onView }) {
     )
   }
 
-  // While the full card is loading (or the fetch failed -- offline, etc),
-  // fall back to the plain cached image. The binder grid is explicitly
-  // offline-capable and must never show nothing while waiting on a network
-  // call it doesn't strictly need just to display the card.
+  // Still fetching the full card -- show "Loading..." rather than any
+  // partial/half-drawn image.
+  if (!card && !error) {
+    return (
+      <div className={boxClass}>
+        <button type="button" className="box-empty-btn" onClick={onView} aria-label="View card">
+          <LoadingDots />
+        </button>
+      </div>
+    )
+  }
+
+  // Fetch failed (offline, etc) and will never resolve on its own -- fall
+  // back to the cached image instead of leaving the user stuck on
+  // "Loading..." forever. FadeImg still only swaps it in once fully decoded.
   if (!card) {
     return (
       <div className={boxClass}>

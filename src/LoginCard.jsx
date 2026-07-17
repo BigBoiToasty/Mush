@@ -175,8 +175,7 @@ function CardFace({
       <button
         type="button"
         onClick={onFlip}
-        onMouseEnter={() => setCurl('in')}
-        onMouseLeave={() => setCurl('out')}
+        // ponytail: curl-on-hover disabled, unfinished -- re-add onMouseEnter/onMouseLeave (setCurl 'in'/'out') to resume
         style={btnStyle(t.layout.buttons.flip)}
         className={btnCls}
       >
@@ -302,7 +301,14 @@ export default function LoginCard() {
       className="flex min-h-screen items-center justify-center"
       style={{ background: TIDE_BG, backgroundSize: 'cover', imageRendering: 'pixelated' }}
     >
-      <div className="@container relative overflow-hidden aspect-[645/400] w-[min(900px,92vw,calc(92vh*1.6125))]">
+      <div className="flex flex-col items-center gap-[1.5vw] w-[min(900px,92vw,calc(92vh*1.6125))]">
+        <h1
+          style={{ ...fontBase, color: t.colors.inputCorner, fontSize: 'clamp(0.7rem, 1.8vw, 1.1rem)' }}
+          className="text-center"
+        >
+          Mush — Online Pokémon Card Binder
+        </h1>
+        <div className="@container relative overflow-hidden aspect-[645/400] w-full">
         <CardFace
           mode={mode}
           showPw={showPw}
@@ -323,6 +329,7 @@ export default function LoginCard() {
           onToggleConfirmPw={() => setShowConfirmPw((v) => !v)}
           onFlip={() => setMode(mode === 'login' ? 'signup' : 'login')}
         />
+        </div>
       </div>
     </div>
   )

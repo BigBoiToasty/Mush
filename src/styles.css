@@ -172,6 +172,46 @@
     right: 2%;
 }
 
+/* Portrait-phone single-page mode: the binder "folds" to one page. The view
+   keeps half the notebook artwork's aspect (321:385) and the bg image is
+   doubled to 200% width so exactly one half shows -- left half for odd
+   pages (spiral on the right edge), shifted for even pages (spiral left),
+   like a real binder folded over. Zone insets are the spread-mode page
+   coordinates re-mapped to half-image space (x2). */
+#binderView.binder-single {
+    width: min(100cqw, 100cqh * (321 / 385));
+    height: min(100cqh, 100cqw * (385 / 321));
+    /* the 200%-wide bg image sticks out past the fold; clip the unused half */
+    overflow: hidden;
+}
+
+.binder-single .binder-notebook-bg {
+    /* max-width: none beats Tailwind preflight's img { max-width: 100% },
+       which would silently cap this back to one page's width. */
+    max-width: none;
+    width: 200%;
+}
+
+.binder-single--right .binder-notebook-bg {
+    left: -100%;
+}
+
+.binder-page-single {
+    position: absolute;
+    top: 2.5%;
+    bottom: 2.5%;
+    left: 4%;
+    right: 5.6%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.binder-single--right .binder-page-single {
+    left: 5.6%;
+    right: 4%;
+}
+
 .hidden {
     display: none !important;
 }
@@ -228,13 +268,27 @@
     border-radius: 8px;
     padding: 16px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    /* align-items:center on the overlay sizes flex items to max-content,
+       which shoved this bar (and the results grid) past both viewport edges
+       on phones -- cap to the viewport. Wrapping is set per-row in JSX:
+       wrap here would break OverlayPanel, whose flex-col + max-height
+       wraps children into a second column instead of scrolling. */
+    max-width: 100%;
+}
+
+.card-search-bar input[type="text"] {
+    min-width: 0;
+    flex: 1 1 140px;
 }
 
 .card-search-results {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: 8px;
-    max-width: 900px;
+    /* 76px = overlay side padding (40) + panel padding/border (36) when this
+       grid sits inside an OverlayPanel; a plain % here would collapse against
+       that panel's fit-content width, so cap against the viewport instead. */
+    max-width: min(900px, calc(100vw - 76px));
     max-height: 60vh;
     overflow-y: auto;
     background: rgba(20, 20, 20, 0.75);
@@ -283,7 +337,7 @@
     border: 2px solid #0a0a0a;
     border-radius: 8px;
     padding: 20px;
-    max-width: 640px;
+    max-width: min(640px, 100%);
     max-height: 80vh;
     overflow-y: auto;
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
@@ -325,7 +379,8 @@
 
 .card-detail-actions {
     display: flex;
-    flex-wrap: nowrap;
+    /* wrap so three action buttons don't push the panel past a phone screen */
+    flex-wrap: wrap;
     gap: 8px;
     justify-content: center;
 }

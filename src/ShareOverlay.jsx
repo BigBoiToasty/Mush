@@ -25,7 +25,13 @@ export default function ShareOverlay({ getShareToken, setShareToken, onClose }) 
     return () => { cancelled = true }
   }, [getShareToken])
 
+  // Turning sharing off invalidates the link permanently, so it arms on the
+  // first tap and only fires on the second.
+  const [armedOff, setArmedOff] = useState(false)
+
   async function handleToggle() {
+    if (token && !armedOff) return setArmedOff(true)
+    setArmedOff(false)
     setToggling(true)
     setError(null)
     const next = token ? null : crypto.randomUUID()
@@ -39,6 +45,17 @@ export default function ShareOverlay({ getShareToken, setShareToken, onClose }) 
   }
 
   const link = token ? `${window.location.origin}${window.location.pathname}?share=${token}` : null
+  const [copied, setCopied] = useState(false)
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(link)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // clipboard unavailable (http, old browser) -- the input still selects on tap
+    }
+  }
 
   return (
     <OverlayPanel title="Share Binder" onClose={onClose} panelStyle={{ minWidth: 280 }}>
@@ -48,16 +65,19 @@ export default function ShareOverlay({ getShareToken, setShareToken, onClose }) 
       {!loading && (
         <div className="flex flex-col gap-2">
           {link && (
-            <input
-              type="text"
-              readOnly
-              value={link}
-              onFocus={(e) => e.target.select()}
-              className="w-full rounded border border-gray-400 px-2 py-1 text-base"
-            />
+            <>
+              <input
+                type="text"
+                readOnly
+                value={link}
+                onFocus={(e) => e.target.select()}
+                className="w-full rounded border border-gray-400 px-2 py-1 text-base"
+              />
+              <NavBtn onClick={handleCopy}>{copied ? 'Copied!' : 'Copy Link'}</NavBtn>
+            </>
           )}
-          <NavBtn disabled={toggling} onClick={handleToggle}>
-            {toggling ? '...' : token ? 'Turn Off Sharing' : 'Turn On Sharing'}
+          <NavBtn danger={!!token && armedOff} disabled={toggling} onClick={handleToggle}>
+            {toggling ? '...' : token ? (armedOff ? 'Tap again — link stops working' : 'Turn Off Sharing') : 'Turn On Sharing'}
           </NavBtn>
         </div>
       )}

@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import BinderGrid from './BinderGrid'
 import CardDetailPopup from './CardDetailPopup'
 import notebookBg from './assets/binder-notebook.png'
-import { fontBase, pageBg, NavBtn, PageNav, spreadStartForPage, usePageSwipe, useDismiss } from './ui'
+import { fontBase, pageBg, NavBtn, PageNav, spreadStartForPage, usePageSwipe, useSinglePageMode, useDismiss } from './ui'
 import { cacheShared, readShared } from './offlineCache'
 import { getSharedBinder, getSharedBinderSlots, searchSharedBinder } from './cards'
 import './styles.css'
@@ -21,7 +21,26 @@ export default function SharedBinderView({ token }) {
   // Registered for the page's lifetime (the search overlay is inline JSX, not
   // its own component); dismissing while closed is a no-op.
   const onSearchBackdropClick = useDismiss(() => setSearchOpen(false))
-  const swipeHandlers = usePageSwipe(setActivePage)
+  // Same portrait-phone single-page fold as BinderPage.
+  const singlePage = useSinglePageMode()
+  const [half, setHalf] = useState(0)
+  const singlePageRef = useRef(singlePage)
+  singlePageRef.current = singlePage
+  const stateRef = useRef({ activePage, half })
+  stateRef.current = { activePage, half }
+
+  const goToPage = useCallback((pageNumber) => {
+    const page = Math.max(1, pageNumber)
+    setActivePage(spreadStartForPage(page))
+    setHalf(page % 2 === 0 ? 1 : 0)
+  }, [])
+
+  const flip = useCallback((dir) => {
+    if (singlePageRef.current) goToPage(stateRef.current.activePage + stateRef.current.half + dir)
+    else setActivePage((p) => (dir > 0 ? p + 2 : Math.max(1, p - 2)))
+  }, [goToPage])
+
+  const swipeHandlers = usePageSwipe(flip)
 
   useEffect(() => {
     let cancelled = false
@@ -79,7 +98,7 @@ export default function SharedBinderView({ token }) {
   }
 
   function handleSelectResult(pageNumber) {
-    setActivePage(spreadStartForPage(pageNumber))
+    goToPage(pageNumber)
     setSearchOpen(false)
   }
 
@@ -97,25 +116,40 @@ export default function SharedBinderView({ token }) {
       <span className="text-base font-semibold text-white">{binder.name}</span>
 
       <div className="binder-scale-wrap" {...swipeHandlers}>
-        <div id="binderView">
-          <img src={notebookBg} alt="" className="binder-notebook-bg" aria-hidden="true" />
-          <div className="binder-page-left">
-            <BinderGrid pageNumber={activePage} slots={leftSlots} heldCard={null} onSlotView={handleSlotView} />
+        {singlePage ? (
+          <div id="binderView" className={`binder-single ${half ? 'binder-single--right' : ''}`}>
+            <img src={notebookBg} alt="" className="binder-notebook-bg" aria-hidden="true" />
+            <div className="binder-page-single">
+              <BinderGrid pageNumber={activePage + half} slots={half ? rightSlots : leftSlots} heldCard={null} onSlotView={handleSlotView} />
+            </div>
           </div>
-          <div className="binder-page-right">
-            <BinderGrid pageNumber={activePage + 1} slots={rightSlots} heldCard={null} onSlotView={handleSlotView} />
+        ) : (
+          <div id="binderView">
+            <img src={notebookBg} alt="" className="binder-notebook-bg" aria-hidden="true" />
+            <div className="binder-page-left">
+              <BinderGrid pageNumber={activePage} slots={leftSlots} heldCard={null} onSlotView={handleSlotView} />
+            </div>
+            <div className="binder-page-right">
+              <BinderGrid pageNumber={activePage + 1} slots={rightSlots} heldCard={null} onSlotView={handleSlotView} />
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
-      <PageNav activePage={activePage} setActivePage={setActivePage}>
+      <PageNav
+        page={singlePage ? activePage + half : (activePage + 1) / 2}
+        onPrev={() => flip(-1)}
+        onNext={() => flip(1)}
+        prevDisabled={activePage <= 1 && (!singlePage || half === 0)}
+        onJump={(n) => (singlePage ? goToPage(n) : setActivePage(n * 2 - 1))}
+      >
         <NavBtn onClick={() => setSearchOpen(true)}>Search</NavBtn>
       </PageNav>
 
       {searchOpen && (
         <div className="card-search-overlay" onClick={onSearchBackdropClick}>
           <form onSubmit={handleSearch} className="card-search-bar flex flex-col gap-2">
-            <div className="flex gap-2">
+            <div className="flex flex-wrap justify-center gap-2">
               <input
                 type="text"
                 value={query}

@@ -64,7 +64,7 @@ export default function CardSearchOverlay({ onSelect, onClose }) {
 
   return (
     <div className="card-search-overlay" onClick={onBackdropClick}>
-      <form onSubmit={handleSearch} className="card-search-bar flex gap-2">
+      <form onSubmit={handleSearch} className="card-search-bar flex flex-wrap justify-center gap-2">
         <select
           value={language}
           onChange={(e) => {

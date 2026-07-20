@@ -64,6 +64,9 @@ export default function CardDetailPopup({ cardId, actions, onClose, ownedVariant
   const [selectedVariant, setSelectedVariant] = useState(null)
   const [selectedFoilType, setSelectedFoilType] = useState(ownedFoilType ?? '')
   const [zoomed, setZoomed] = useState(false)
+  // Danger actions (Remove from Binder) arm on first tap and only fire on
+  // the second, so a stray tap can't silently discard a placed card.
+  const [armedLabel, setArmedLabel] = useState(null)
   const onBackdropClick = useDismiss(onClose)
 
   // Seeds the pickers once per card load: view mode starts on whatever's
@@ -159,8 +162,16 @@ export default function CardDetailPopup({ cardId, actions, onClose, ownedVariant
               variant to choose between. Padding/font shrink with viewport
               width so all buttons stay on one row instead of wrapping. */}
           {card && actions?.filter((a) => !a.requiresVariantChoice || variantKeys.length > 1).map((a) => (
-            <NavBtn key={a.label} danger={a.danger} onClick={() => a.onClick(selectedVariant, selectedFoilType || null)} style={actionButtonStyle}>
-              {a.label}
+            <NavBtn
+              key={a.label}
+              danger={a.danger}
+              onClick={() => {
+                if (a.danger && armedLabel !== a.label) return setArmedLabel(a.label)
+                a.onClick(selectedVariant, selectedFoilType || null)
+              }}
+              style={actionButtonStyle}
+            >
+              {a.danger && armedLabel === a.label ? 'Tap again to confirm' : a.label}
             </NavBtn>
           ))}
           <NavBtn onClick={onClose} style={actionButtonStyle}>Close</NavBtn>

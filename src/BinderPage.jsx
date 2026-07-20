@@ -13,7 +13,7 @@ import SetCompletionOverlay from './SetCompletionOverlay'
 import OfflineReadyOverlay from './OfflineReadyOverlay'
 import notebookBg from './assets/binder-notebook.png'
 import BackgroundPicker from './BackgroundPicker'
-import { fontBase, pageBg, binderPageBg, NavBtn, PageNav, OverlayPanel, ButtonSkinPicker, DropdownMenu, spreadStartForPage, usePageSwipe, LoadingScreen } from './ui'
+import { fontBase, pageBg, binderPageBg, NavBtn, PageNav, OverlayPanel, ButtonSkinPicker, DropdownMenu, spreadStartForPage, usePageSwipe, useSinglePageMode, LoadingScreen } from './ui'
 import { planMove, getAllBinderSlots, slotsToCsv, csvToSlots, importSlots, getBinderBackground } from './cards'
 import { syncAllForOffline } from './offlineSync'
 import { readSlots } from './offlineCache'
@@ -57,6 +57,10 @@ const MENU_ITEMS = [
   ['Delete Binder', 'delete', true],
 ]
 
+// Ten flat items overload the menu; extra space before these keys splits it
+// into navigate / info+share / customize / data / danger groups.
+const MENU_GROUP_STARTS = new Set(['stats', 'buttonStyle', 'export', 'delete'])
+
 export default function BinderPage({ userId }) {
   const {
     binderId, binderName, loading, error, fetchPage, placeCard, removeCard, findInBinder, findInAllBinders,
@@ -88,7 +92,44 @@ export default function BinderPage({ userId }) {
   const loadSeq = useRef(0)
   const activePageRef = useRef(activePage)
   activePageRef.current = activePage
-  const swipeHandlers = usePageSwipe(setActivePage)
+  // Portrait phones show one page at a time; `half` picks which page of the
+  // already-loaded spread is visible (0 = activePage, 1 = activePage + 1),
+  // so single-page flipping never changes what data gets fetched.
+  const singlePage = useSinglePageMode()
+  const [half, setHalf] = useState(0)
+  const singlePageRef = useRef(singlePage)
+  singlePageRef.current = singlePage
+  const halfRef = useRef(half)
+  halfRef.current = half
+
+  const goToPage = useCallback((pageNumber) => {
+    const page = Math.max(1, pageNumber)
+    setActivePage(spreadStartForPage(page))
+    setHalf(page % 2 === 0 ? 1 : 0)
+  }, [])
+
+  const flip = useCallback((dir) => {
+    if (singlePageRef.current) goToPage(activePageRef.current + halfRef.current + dir)
+    else setActivePage((p) => (dir > 0 ? p + 2 : Math.max(1, p - 2)))
+  }, [goToPage])
+
+  const swipeHandlers = usePageSwipe(flip)
+
+  // Arrow keys flip pages on desktop. Ignored while any overlay/menu is up
+  // (Escape already belongs to those) or while typing in a field; flipping
+  // with a held/pending card stays allowed -- that's how you carry a card
+  // to another page.
+  const uiBusyRef = useRef(false)
+  uiBusyRef.current = !!(overlay || activeSlot || viewingSlot || menuOpen || pendingImport)
+  useEffect(() => {
+    const onKey = (e) => {
+      if (uiBusyRef.current || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return
+      if (e.key === 'ArrowRight') flip(1)
+      else if (e.key === 'ArrowLeft') flip(-1)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [flip])
 
   const reloadPages = useCallback(async () => {
     if (!binderId) return
@@ -178,7 +219,7 @@ export default function BinderPage({ userId }) {
 
   function handleFindResultSelect(pageNumber, resultBinderId, resultBinderName) {
     if (resultBinderId !== binderId) handleSwitchBinder(resultBinderId, resultBinderName)
-    setActivePage(spreadStartForPage(pageNumber))
+    goToPage(pageNumber)
     setOverlay(null)
   }
 
@@ -347,7 +388,7 @@ export default function BinderPage({ userId }) {
             <button
               type="button"
               onClick={() => setOverlay('offlineInfo')}
-              className="absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap text-xs font-normal text-green-400"
+              className="absolute left-1/2 top-full -translate-x-1/2 whitespace-nowrap text-xs font-normal text-green-400 sm:left-full sm:top-1/2 sm:ml-2 sm:-translate-y-1/2 sm:translate-x-0"
               title="Every card in your collection is cached -- safe to go offline"
             >
               Offline ready
@@ -413,6 +454,7 @@ export default function BinderPage({ userId }) {
                     padding: 'clamp(0.15rem, 0.7vh, 0.4rem) clamp(0.4rem, 1.8vh, 0.75rem)',
                     fontSize: 'clamp(0.75rem, 2.2vh, 1rem)',
                     whiteSpace: 'nowrap',
+                    ...(MENU_GROUP_STARTS.has(key) && { marginTop: 'clamp(8px, 1.6vh, 16px)' }),
                   }}
                 >
                   {label}
@@ -440,30 +482,52 @@ export default function BinderPage({ userId }) {
       )}
 
       <div className="binder-scale-wrap" {...swipeHandlers}>
-        <div id="binderView">
-          <img src={notebookBg} alt="" className="binder-notebook-bg" aria-hidden="true" />
-          <div className="binder-page-left">
-            <BinderGrid
-              pageNumber={activePage}
-              slots={leftSlots}
-              heldCard={heldCard}
-              onSlotChoose={handleSlotChoose}
-              onSlotView={handleSlotView}
-            />
+        {singlePage ? (
+          <div id="binderView" className={`binder-single ${half ? 'binder-single--right' : ''}`}>
+            <img src={notebookBg} alt="" className="binder-notebook-bg" aria-hidden="true" />
+            <div className="binder-page-single">
+              <BinderGrid
+                pageNumber={activePage + half}
+                slots={half ? rightSlots : leftSlots}
+                heldCard={heldCard}
+                onSlotChoose={handleSlotChoose}
+                onSlotView={handleSlotView}
+              />
+            </div>
           </div>
-          <div className="binder-page-right">
-            <BinderGrid
-              pageNumber={activePage + 1}
-              slots={rightSlots}
-              heldCard={heldCard}
-              onSlotChoose={handleSlotChoose}
-              onSlotView={handleSlotView}
-            />
+        ) : (
+          <div id="binderView">
+            <img src={notebookBg} alt="" className="binder-notebook-bg" aria-hidden="true" />
+            <div className="binder-page-left">
+              <BinderGrid
+                pageNumber={activePage}
+                slots={leftSlots}
+                heldCard={heldCard}
+                onSlotChoose={handleSlotChoose}
+                onSlotView={handleSlotView}
+              />
+            </div>
+            <div className="binder-page-right">
+              <BinderGrid
+                pageNumber={activePage + 1}
+                slots={rightSlots}
+                heldCard={heldCard}
+                onSlotChoose={handleSlotChoose}
+                onSlotView={handleSlotView}
+              />
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
-      <PageNav activePage={activePage} setActivePage={setActivePage} lastPage={lastPage} />
+      <PageNav
+        page={singlePage ? activePage + half : (activePage + 1) / 2}
+        total={lastPage ? (singlePage ? lastPage : Math.ceil(lastPage / 2)) : null}
+        onPrev={() => flip(-1)}
+        onNext={() => flip(1)}
+        prevDisabled={activePage <= 1 && (!singlePage || half === 0)}
+        onJump={(n) => (singlePage ? goToPage(n) : setActivePage(n * 2 - 1))}
+      />
 
       {(activeSlot || overlay === 'search') && (
         <CardSearchOverlay
@@ -529,7 +593,7 @@ export default function BinderPage({ userId }) {
           }}
           onGoToPage={(pageNumber) => {
             setOverlay(null)
-            setActivePage(spreadStartForPage(pageNumber))
+            goToPage(pageNumber)
           }}
         />
       )}

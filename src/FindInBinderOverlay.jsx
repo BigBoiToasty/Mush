@@ -33,7 +33,7 @@ export default function FindInBinderOverlay({ onFind, onFindAll, onSelectResult,
   return (
     <div className="card-search-overlay" onClick={onBackdropClick}>
       <form onSubmit={handleSearch} className="card-search-bar flex flex-col gap-2">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap justify-center gap-2">
           <input
             type="text"
             value={query}
@@ -44,7 +44,7 @@ export default function FindInBinderOverlay({ onFind, onFindAll, onSelectResult,
           <NavBtn type="submit" disabled={loading}>{loading ? '...' : 'Find'}</NavBtn>
           <NavBtn onClick={onClose}>Cancel</NavBtn>
         </div>
-        <label className="flex items-center gap-2 text-white">
+        <label className="flex items-center gap-2 text-gray-900">
           <input type="checkbox" checked={allBinders} onChange={(e) => setAllBinders(e.target.checked)} />
           Search all binders
         </label>

@@ -23,6 +23,7 @@ export default defineConfig({
       devOptions: { enabled: true }, // SW is off by default under `vite dev` -- needed to test offline locally
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,webp,svg,woff,woff2}'],
+        navigateFallbackDenylist: [/\.(xml|txt|webmanifest)$/],
         runtimeCaching: [
           {
             // Card art never changes -> serve from disk forever once fetched.

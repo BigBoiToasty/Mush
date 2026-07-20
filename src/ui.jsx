@@ -286,10 +286,12 @@ export function spreadStartForPage(pageNumber) {
   return clamped % 2 === 1 ? clamped : clamped - 1
 }
 
-// Swipe left/right on the binder flips to the next/previous spread -- the
-// natural page-turn gesture on a phone. Only horizontal-dominant moves of
-// 50px+ count, so vertical scrolls and taps on cards never flip pages.
-export function usePageSwipe(setActivePage) {
+// Swipe left/right on the binder flips forward/back -- the natural page-turn
+// gesture on a phone. Only horizontal-dominant moves of 50px+ count, so
+// vertical scrolls and taps on cards never flip pages. `flip(dir)` receives
+// +1/-1 so the caller decides what one step means (a spread, or a single
+// page in phone-portrait mode).
+export function usePageSwipe(flip) {
   const start = useRef(null)
   return {
     onTouchStart: (e) => {
@@ -301,20 +303,34 @@ export function usePageSwipe(setActivePage) {
       const dy = e.changedTouches[0].clientY - start.current.y
       start.current = null
       if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy)) return
-      setActivePage((p) => (dx < 0 ? p + 2 : Math.max(1, p - 2)))
+      flip(dx < 0 ? 1 : -1)
     },
   }
 }
 
-// Prev / "Page N" (click to jump) / Next. Steps by 2 so activePage stays odd
-// (left page of the spread), matching what spreadStartForPage produces.
-// `lastPage` (highest page holding a card) shows the binder's extent as
-// "Page 3 / 12" -- Next is never blocked, since growing the binder means
-// paging past the end. Extra buttons render after Next.
-export function PageNav({ activePage, setActivePage, lastPage, children }) {
+// True on portrait phones, where the two-page spread would render each card
+// ~45px wide. Callers switch to showing one page at a time instead.
+const SINGLE_PAGE_MQ = '(max-width: 640px) and (orientation: portrait)'
+export function useSinglePageMode() {
+  const [single, setSingle] = useState(() => window.matchMedia(SINGLE_PAGE_MQ).matches)
+  useEffect(() => {
+    const mq = window.matchMedia(SINGLE_PAGE_MQ)
+    const onChange = () => setSingle(mq.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+  return single
+}
+
+// Prev / "Page N" (click to jump) / Next. Dumb about paging semantics: the
+// caller supplies the displayed `page` number, optional `total` extent
+// ("Page 3 / 12"), step handlers, and `onJump(n)` for the type-a-number
+// jump -- so the same control serves spread mode (a "page" is a spread) and
+// phone single-page mode. Next is never blocked, since growing the binder
+// means paging past the end. Extra buttons render after Next.
+export function PageNav({ page, total, onPrev, onNext, onJump, prevDisabled, children }) {
   const [editing, setEditing] = useState(false)
   const [input, setInput] = useState('')
-  const displayedPage = (activePage + 1) / 2
 
   function stopEditing() {
     setEditing(false)
@@ -325,7 +341,7 @@ export function PageNav({ activePage, setActivePage, lastPage, children }) {
     e.preventDefault()
     const target = Number(input)
     if (!Number.isInteger(target) || target < 1) return
-    setActivePage(target * 2 - 1)
+    onJump(target)
     stopEditing()
   }
 
@@ -348,13 +364,13 @@ export function PageNav({ activePage, setActivePage, lastPage, children }) {
 
   return (
     <div className="flex shrink-0 items-center gap-4">
-      <NavBtn onClick={() => setActivePage((p) => Math.max(1, p - 2))} disabled={activePage <= 1}>
+      <NavBtn onClick={onPrev} disabled={prevDisabled}>
         Prev
       </NavBtn>
-      <NavBtn onClick={() => { setInput(String(displayedPage)); setEditing(true) }}>
-        Page {displayedPage}{lastPage ? ` / ${Math.max(displayedPage, Math.ceil(lastPage / 2))}` : ''}
+      <NavBtn onClick={() => { setInput(String(page)); setEditing(true) }}>
+        Page {page}{total ? ` / ${Math.max(page, total)}` : ''}
       </NavBtn>
-      <NavBtn onClick={() => setActivePage((p) => p + 2)}>Next</NavBtn>
+      <NavBtn onClick={onNext}>Next</NavBtn>
       {children}
     </div>
   )

@@ -8,6 +8,7 @@ import { theme } from './theme'
 import { supabase } from './supabaseClient'
 import { toAuthEmail } from './auth'
 import { TIDE_BG, FRAME } from './pixelArt'
+import Turnstile, { TURNSTILE_SITE_KEY } from './Turnstile'
 
 // Notebook login card. Scales to fit the viewport while keeping its 645:400
 // ratio; inner elements use percentages + cqw so the whole thing scales as one.
@@ -248,21 +249,35 @@ export default function LoginCard() {
   const [confirmPw, setConfirmPw] = useState('')
   const [authError, setAuthError] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState(null)
+  const [captchaReset, setCaptchaReset] = useState(0)
+
+  // Supabase rejects password sign-in/sign-up without a Turnstile token once
+  // captcha is enabled server-side; Google sign-in doesn't need one.
+  function captchaMissing() {
+    if (!TURNSTILE_SITE_KEY || captchaToken) return false
+    setAuthError('Checking you are human, try again in a moment')
+    return true
+  }
 
   async function handleLogin(u, p) {
     setAuthError(null)
+    if (captchaMissing()) return
     setLoading(true)
     const { error } = await supabase.auth.signInWithPassword({
       email: toAuthEmail(u),
       password: p,
+      options: { captchaToken },
     })
+    setCaptchaReset((n) => n + 1)
     setLoading(false)
-    if (error) setAuthError('Incorrect username or password')
+    if (error) setAuthError(/captcha/i.test(error.message) ? 'Human check failed, try again' : 'Incorrect username or password')
   }
 
   async function handleSignup(u, p, cp) {
     setAuthError(null)
     if (p !== cp) { setAuthError('Passwords do not match'); return }
+    if (captchaMissing()) return
     setLoading(true)
     const { data: existing } = await supabase
       .from('profiles')
@@ -277,8 +292,9 @@ export default function LoginCard() {
     const { error } = await supabase.auth.signUp({
       email: toAuthEmail(u),
       password: p,
-      options: { data: { username: u.trim().toLowerCase() } },
+      options: { data: { username: u.trim().toLowerCase() }, captchaToken },
     })
+    setCaptchaReset((n) => n + 1)
     setLoading(false)
     if (error) {
       setAuthError(error.message)
@@ -330,6 +346,7 @@ export default function LoginCard() {
           onFlip={() => setMode(mode === 'login' ? 'signup' : 'login')}
         />
         </div>
+        <Turnstile onToken={setCaptchaToken} resetKey={captchaReset} />
       </div>
     </div>
   )

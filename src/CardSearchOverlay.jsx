@@ -65,7 +65,9 @@ export default function CardSearchOverlay({ onSelect, onClose }) {
           {results.map((card) => (
             <img
               key={card.id}
-              src={cardImageUrl(card.image)}
+              src={cardImageUrl(card.image, 'low')}
+              loading="lazy"
+              decoding="async"
               alt={card.name}
               onClick={() => setDetailCard(card)}
             />

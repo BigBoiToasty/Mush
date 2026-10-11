@@ -3,6 +3,7 @@ import BinderSpread from './BinderSpread'
 import CardDetailPopup from './CardDetailPopup'
 import { fontBase, pageBg, NavBtn, PageNav, useDismiss } from './ui'
 import { useSpreadNav } from './useSpreadNav'
+import { thumbnailUrl } from './tcgdex'
 import { cacheShared, readShared } from './offlineCache'
 import { getSharedBinder, getSharedBinderSlots, searchSharedBinder, slotToCard } from './binderDb'
 import './styles.css'
@@ -127,7 +128,7 @@ export default function SharedBinderView({ token }) {
                   className="find-in-binder-result"
                   onClick={() => handleSelectResult(slot.page_number)}
                 >
-                  <img src={slot.card_image} alt={slot.card_name} />
+                  <img src={thumbnailUrl(slot.card_image)} alt={slot.card_name} loading="lazy" decoding="async" />
                   <span>{slot.card_name}</span>
                   <span>Page {slot.page_number}</span>
                 </button>

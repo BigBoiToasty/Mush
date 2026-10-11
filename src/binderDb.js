@@ -174,29 +174,35 @@ export async function backfillCardNames(binderId) {
   }))
 }
 
-export async function getBinderCounts(binderId) {
+// Highest page holding a card (0 for an empty binder) -- one row, not the
+// whole binder, since "Page X / Y" refreshes on every page flip.
+export async function getLastPage(binderId) {
   const { data, error } = await supabase
     .from('binder_slots')
     .select('page_number')
     .eq('binder_id', binderId)
+    .order('page_number', { ascending: false })
+    .limit(1)
 
-  if (error || !data) return { cardCount: 0, pageCount: 0 }
+  if (error || !data?.length) return 0
+  return data[0].page_number
+}
 
-  return {
-    cardCount: data.length,
-    pageCount: data.length ? Math.max(...data.map((slot) => slot.page_number)) : 0,
-  }
+export async function getBinderCounts(binderId) {
+  const [{ count, error }, pageCount] = await Promise.all([
+    supabase.from('binder_slots').select('*', { count: 'exact', head: true }).eq('binder_id', binderId),
+    getLastPage(binderId),
+  ])
+
+  if (error) return { cardCount: 0, pageCount: 0 }
+  return { cardCount: count ?? 0, pageCount }
 }
 
 // Fetches live pricing for every unique card in the binder (one API call
 // per unique card, not per slot) and sums each slot's owned-variant price.
 export async function getBinderWorth(binderId) {
-  const { data, error } = await supabase
-    .from('binder_slots')
-    .select('card_id, variant, language')
-    .eq('binder_id', binderId)
-
-  if (error || !data?.length) return 0
+  const data = await getAllBinderSlots(binderId)
+  if (!data.length) return 0
 
   const key = (slot) => cardKey(slot.language, slot.card_id)
   const pairs = [...new Map(data.map((slot) => [key(slot), slot])).values()]

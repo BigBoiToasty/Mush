@@ -60,7 +60,7 @@ export default function SetCompletionOverlay({ getCompletion, getSetCards, onClo
                     className="flex flex-col items-center gap-1"
                     style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'inherit', font: 'inherit' }}
                   >
-                    <img src={cardImageUrl(card.image, 'low')} alt={card.name} />
+                    <img src={cardImageUrl(card.image, 'low')} alt={card.name} loading="lazy" decoding="async" />
                     <span>{card.owned ? '✓' : '✗'} {card.name}</span>
                   </button>
                   {card.owned && (

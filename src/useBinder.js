@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getBinders, createBinders, renameBinders, deleteBinders, getCards, saveCards, deleteCard, findCardsByName, findCardsByNameAllBinders, backfillCardNames, getBinderCounts, getBinderWorth, getBinderShareToken, setBinderShareToken, cardToSlot } from './binderDb'
+import { getBinders, createBinders, renameBinders, deleteBinders, getCards, saveCards, deleteCard, findCardsByName, findCardsByNameAllBinders, backfillCardNames, getBinderCounts, getLastPage, getBinderWorth, getBinderShareToken, setBinderShareToken, cardToSlot } from './binderDb'
 import { getSetCompletion, getSetCards } from './sets'
 import { writeOrQueue } from './offlineQueue'
 
@@ -110,6 +110,7 @@ export function useBinder(userId) {
   const deleteBinder = useCallback((id) => deleteBinders(id), [])
 
   const getCounts = useCallback(() => getBinderCounts(binderId), [binderId])
+  const fetchLastPage = useCallback(() => getLastPage(binderId), [binderId])
   const getWorth = useCallback(() => getBinderWorth(binderId), [binderId])
   const getShareToken = useCallback(() => getBinderShareToken(binderId), [binderId])
   const setShareToken = useCallback((token) => setBinderShareToken(binderId, token), [binderId])
@@ -117,7 +118,7 @@ export function useBinder(userId) {
 
   return {
     binderId, binderName, loading, error, fetchPage, placeCard, removeCard, findInBinder, findInAllBinders,
-    listBinders, switchBinder, createBinder, renameBinder, deleteBinder, getCounts, getWorth,
+    listBinders, switchBinder, createBinder, renameBinder, deleteBinder, getCounts, fetchLastPage, getWorth,
     getShareToken, setShareToken, getCompletion, getSetCards,
   }
 }

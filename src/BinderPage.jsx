@@ -5,6 +5,7 @@ import BinderSpread from './BinderSpread'
 import MoreMenu from './MoreMenu'
 import { useCsvTransfer, CsvImportPanel } from './CsvTransfer'
 import { useSpreadNav } from './useSpreadNav'
+import { thumbnailUrl } from './tcgdex'
 import CardSearchOverlay from './CardSearchOverlay'
 import CardDetailPopup from './CardDetailPopup'
 import FindInBinderOverlay from './FindInBinderOverlay'
@@ -25,7 +26,7 @@ import './styles.css'
 function CardBanner({ image, onCancel, children }) {
   return (
     <div className="flex shrink-0 items-center gap-2 text-white">
-      <img src={image} alt="" className="h-10" />
+      <img src={thumbnailUrl(image)} alt="" className="h-10" />
       <span>{children}</span>
       <NavBtn onClick={onCancel}>Cancel</NavBtn>
     </div>
@@ -35,7 +36,7 @@ function CardBanner({ image, onCancel, children }) {
 export default function BinderPage({ userId }) {
   const {
     binderId, binderName, loading, error, fetchPage, placeCard, removeCard, findInBinder, findInAllBinders,
-    listBinders, switchBinder, createBinder, renameBinder, deleteBinder, getCounts, getWorth,
+    listBinders, switchBinder, createBinder, renameBinder, deleteBinder, getCounts, fetchLastPage, getWorth,
     getShareToken, setShareToken, getCompletion, getSetCards,
   } = useBinder(userId)
   // null means "not yet loaded" (distinct from a confirmed-empty []),
@@ -82,16 +83,16 @@ export default function BinderPage({ userId }) {
       setLeftSlots(cachedLeft ?? [])
       setRightSlots(cachedRight ?? [])
     }
-    const [left, right, counts] = await Promise.all([
+    const [left, right, last] = await Promise.all([
       fetchPage(activePage),
       fetchPage(activePage + 1),
-      getCounts(), // keeps "Page X / Y" current after placements/removals
+      fetchLastPage(), // keeps "Page X / Y" current after placements/removals
     ])
     if (seq !== loadSeq.current) return
     setLeftSlots(left)
     setRightSlots(right)
-    setLastPage(counts.pageCount)
-  }, [binderId, activePage, fetchPage, getCounts])
+    setLastPage(last)
+  }, [binderId, activePage, fetchPage, fetchLastPage])
 
   useEffect(() => {
     reloadPages()

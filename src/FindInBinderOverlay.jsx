@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { NavBtn, useDismiss } from './ui'
+import { thumbnailUrl } from './tcgdex'
 
 export default function FindInBinderOverlay({ onFind, onFindAll, onSelectResult, onClose }) {
   const [query, setQuery] = useState('')
@@ -60,7 +61,7 @@ export default function FindInBinderOverlay({ onFind, onFindAll, onSelectResult,
               className="find-in-binder-result"
               onClick={() => onSelectResult(slot.page_number, slot.binder_id, slot.binder_name)}
             >
-              <img src={slot.card_image} alt={slot.card_name} />
+              <img src={thumbnailUrl(slot.card_image)} alt={slot.card_name} loading="lazy" decoding="async" />
               <span>{slot.card_name}</span>
               <span>Page {slot.page_number}{slot.binder_name ? ` — ${slot.binder_name}` : ''}</span>
             </button>

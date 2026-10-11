@@ -8,7 +8,7 @@ const VARIANT_LABELS = { firstEdition: '1st Edition', holo: 'Holo', reverse: 'Re
 const VARIANT_ORDER = ['normal', 'holo', 'reverse', 'firstEdition', 'wPromo']
 
 // Values are the literal `data-rarity` strings simeydotme/pokemon-cards-css
-// selects on (see public/css/cards/*.css) -- TCGdex doesn't track these foil
+// selects on (see src/holo/cards/*.css) -- TCGdex doesn't track these foil
 // patterns, so this lets you pick one by hand. Left blank ("Auto"),
 // HoloCard falls back to guessFoilType() and then card.rarity.toLowerCase().
 // NOTE: the library has no distinct "galaxy" effect -- galaxy.jpg/-source.png

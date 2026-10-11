@@ -2,7 +2,7 @@
 .card {
 
   --grain: url("/img/grain.webp");
-  --glitter: url("/img/glitter.png");
+  --glitter: url("/img/glitter.webp");
   --glittersize: 25%;
 
   --space: 5%;

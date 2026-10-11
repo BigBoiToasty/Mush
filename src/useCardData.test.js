@@ -5,10 +5,10 @@ import { createRoot } from 'react-dom/client'
 import { useCardData } from './useCardData'
 
 vi.mock('./tcgdex', () => ({
-  cardKey: (language, cardId) => `${language}|${cardId}`,
   fetchCard: vi.fn(),
+  peekCard: vi.fn(),
 }))
-import { fetchCard } from './tcgdex'
+import { fetchCard, peekCard } from './tcgdex'
 
 // Mounts useCardData in a bare component and exposes its latest return value.
 function mountHook(cardId, language) {
@@ -39,6 +39,7 @@ function mountHook(cardId, language) {
 
 beforeEach(() => {
   fetchCard.mockReset()
+  peekCard.mockReset()
 })
 
 describe('useCardData', () => {
@@ -62,16 +63,25 @@ describe('useCardData', () => {
     hook.unmount()
   })
 
-  it('serves a second mount for the same card/language from cache without refetching', async () => {
-    fetchCard.mockResolvedValue({ id: 'base1-4', name: 'Charizard' })
+  it('renders an already-fetched card immediately without a request', () => {
+    peekCard.mockReturnValue({ id: 'base1-4', name: 'Charizard' })
+    const hook = mountHook('base1-4', 'en')
+    expect(hook.value).toEqual({ card: { id: 'base1-4', name: 'Charizard' }, loading: false, error: false })
+    expect(fetchCard).not.toHaveBeenCalled()
+    hook.unmount()
+  })
+
+  it('retries a failed card on the next mount', async () => {
+    fetchCard.mockResolvedValue(null)
     const first = mountHook('base1-4', 'en')
     await act(async () => {})
     first.unmount()
 
-    fetchCard.mockClear()
+    fetchCard.mockResolvedValue({ id: 'base1-4', name: 'Charizard' })
     const second = mountHook('base1-4', 'en')
+    await act(async () => {})
     expect(second.value).toEqual({ card: { id: 'base1-4', name: 'Charizard' }, loading: false, error: false })
-    expect(fetchCard).not.toHaveBeenCalled()
+    expect(fetchCard).toHaveBeenCalledTimes(2)
     second.unmount()
   })
 

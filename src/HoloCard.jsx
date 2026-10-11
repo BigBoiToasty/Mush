@@ -4,7 +4,7 @@ import FadeImg from './FadeImg'
 import { cardImageUrl } from './tcgdex'
 
 // Maps TCGdex card data + our custom_foil_type override to the DOM shape
-// simeydotme/pokemon-cards-css's selectors expect (see public/css/cards/*.css
+// simeydotme/pokemon-cards-css's selectors expect (see src/holo/cards/*.css
 // and /LICENSE, GPL-3.0). Two corrections from a plain TCGdex->attribute
 // mapping:
 //  - the card__translater/card__rotator wrapper divs are required: base.css

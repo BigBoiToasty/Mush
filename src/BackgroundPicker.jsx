@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { OverlayPanel, NavBtn } from './ui'
-import { uploadBinderBackground, setBinderBackground } from './cards'
+import { uploadBinderBackground, setBinderBackground } from './binderDb'
 
 const MAX_BYTES = 5 * 1024 * 1024
 

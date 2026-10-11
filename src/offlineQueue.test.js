@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { enqueueOp, flushQueue } from './offlineQueue'
 import { cacheSlots, readSlots, readQueue } from './offlineCache'
-import { saveCards, deleteCard } from './cards'
+import { saveCards, deleteCard } from './binderDb'
 
-vi.mock('./cards', () => ({
+vi.mock('./binderDb', () => ({
   saveCards: vi.fn(),
   deleteCard: vi.fn(),
 }))

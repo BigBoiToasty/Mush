@@ -7,28 +7,17 @@ import googleG from './assets/google-g.png'
 import { theme } from './theme'
 import { supabase } from './supabaseClient'
 import { toAuthEmail } from './auth'
-import { TIDE_BG, FRAME } from './pixelArt'
+import { fontBase, frameBox as pixelFrame } from './frameStyles'
+import { pageBg } from './ui'
 import Turnstile, { TURNSTILE_SITE_KEY } from './Turnstile'
 
 // Notebook login card. Scales to fit the viewport while keeping its 645:400
 // ratio; inner elements use percentages + cqw so the whole thing scales as one.
 // ALL tweakable values live in theme.js — edit there.
 const t = theme
-const fontBase = { fontFamily: t.font.family, letterSpacing: t.font.letterSpacing }
 
 // Shared pixel-frame look for inputs and buttons.
-const frameBox = {
-  ...fontBase,
-  color: t.colors.inputText,
-  backgroundColor: t.colors.inputCorner,
-  borderStyle: 'solid',
-  borderWidth: t.frame.width,
-  borderImageSource: FRAME,
-  borderImageSlice: `${t.frame.slice} fill`,
-  borderImageRepeat: 'stretch',
-  imageRendering: 'pixelated',
-  outline: 'none',
-}
+const frameBox = pixelFrame(t.frame.width)
 
 const pixelInput = {
   ...frameBox,
@@ -315,7 +304,7 @@ export default function LoginCard() {
   return (
     <div
       className="flex min-h-screen items-center justify-center"
-      style={{ background: TIDE_BG, backgroundSize: 'cover', imageRendering: 'pixelated' }}
+      style={pageBg}
     >
       <div className="flex flex-col items-center gap-[1.5vw] w-[min(900px,92vw,calc(92vh*1.6125))]">
         <h1

@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useSyncExternalStore } from 'react'
 import { theme } from './theme'
 import { TIDE_BG, FRAME_SHARP_DANGER, BUTTON_SKINS, getButtonSkinFrame } from './pixelArt'
-import { setButtonPrefs } from './cards'
+import { setButtonPrefs } from './binderDb'
+import { fontBase } from './frameStyles'
 
 // Shared UI primitives: the pixel-frame button, the overlay panel scaffold,
 // the binder page-spread navigator, and the load-on-mount hook every overlay
@@ -9,7 +10,7 @@ import { setButtonPrefs } from './cards'
 
 const t = theme
 
-export const fontBase = { fontFamily: t.font.family, letterSpacing: t.font.letterSpacing }
+export { fontBase }
 // backgroundImage (not the `background` shorthand) so switching binders
 // between this and an uploaded binderPageBg() style never mixes shorthand
 // and longhand background properties on the same element -- React warns

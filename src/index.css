@@ -4,15 +4,7 @@
    fetch) never flashes the browser's default white background. */
 html, body { background: #081c3a; }
 
-/* User-supplied fonts (src/assets/fonts). Names here are what the UI uses. */
-@font-face { font-family: "Munro";                  src: url("./assets/fonts/Munro-2LYe.ttf"); }
-@font-face { font-family: "Munro Narrow";           src: url("./assets/fonts/MunroNarrow-vaO4.ttf"); }
-@font-face { font-family: "Munro Small";            src: url("./assets/fonts/MunroSmall-wPZw.ttf"); }
-@font-face { font-family: "Pixel Noir";             src: url("./assets/fonts/Pixel-Noir.ttf"); }
-@font-face { font-family: "Pixel Noir Caps";        src: url("./assets/fonts/Pixel-Noir-Caps.ttf"); }
-@font-face { font-family: "Pixel Noir Skinny";      src: url("./assets/fonts/Pixel-Noir-Skinny.ttf"); }
-@font-face { font-family: "Pixel Noir Skinny Caps"; src: url("./assets/fonts/Pixel-Noir-Skinny-Caps.ttf"); }
-@font-face { font-family: "Pixel Noir Skinny Short";src: url("./assets/fonts/Pixel-Noir-Skinny-Short.ttf"); }
+/* The app font (src/assets/fonts). */
 @font-face { font-family: "RetroByte";              src: url("./assets/fonts/RetroByte.ttf"); }
 
 /* 8-bit frame: chunky black border with stepped (notched) corners, drawn from

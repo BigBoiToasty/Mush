@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { NavBtn, useDismiss } from './ui'
-import { pickTcgplayerEntry } from './cards'
+import { pickTcgplayerEntry } from './pricing'
 import { useCardData } from './useCardData'
 import HoloCard from './HoloCard'
 

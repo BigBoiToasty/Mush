@@ -1,20 +1,7 @@
 import { useState } from 'react'
 import { NavBtn, useDismiss } from './ui'
-import { LANGUAGES, cardUrl, hasCJK, pickByExactName } from './cards'
+import { LANGUAGES, searchCards, cardImageUrl } from './tcgdex'
 import CardDetailPopup from './CardDetailPopup'
-
-// Resolve an English Pokemon name to its National Pokedex number, so a
-// non-English language can be searched by dex (the only key shared across
-// languages -- card IDs and names differ). Returns null if unresolvable.
-async function resolveDexId(name) {
-  const res = await fetch(`https://api.tcgdex.net/v2/en/cards?name=${encodeURIComponent(name)}`)
-  if (!res.ok) throw new Error('Search failed')
-  const list = await res.json()
-  const match = pickByExactName(list, name)
-  if (!match) return null
-  const full = await (await fetch(cardUrl('en', match.id))).json()
-  return full?.dexId?.[0] ?? null
-}
 
 export default function CardSearchOverlay({ onSelect, onClose }) {
   const [query, setQuery] = useState('')
@@ -33,24 +20,7 @@ export default function CardSearchOverlay({ onSelect, onClose }) {
     setLoading(true)
     setError(null)
     try {
-      // English target, or native-script input (e.g. "ピカチュウ"): search that
-      // language by name directly. English input against a non-English target:
-      // bridge through the dex number since names don't match across languages.
-      let url
-      if (language === 'en' || hasCJK(trimmed)) {
-        url = `https://api.tcgdex.net/v2/${language}/cards?name=${encodeURIComponent(trimmed)}`
-      } else {
-        const dexId = await resolveDexId(trimmed)
-        if (dexId == null) {
-          setResults([])
-          return
-        }
-        url = `https://api.tcgdex.net/v2/${language}/cards?dexId=eq:${dexId}`
-      }
-      const response = await fetch(url)
-      if (!response.ok) throw new Error('Search failed')
-      const data = await response.json()
-      setResults(data.filter((card) => card.image))
+      setResults(await searchCards(trimmed, language))
     } catch (err) {
       console.error('Card search error:', err)
       setError(navigator.onLine
@@ -95,7 +65,7 @@ export default function CardSearchOverlay({ onSelect, onClose }) {
           {results.map((card) => (
             <img
               key={card.id}
-              src={`${card.image}/high.webp`}
+              src={cardImageUrl(card.image)}
               alt={card.name}
               onClick={() => setDetailCard(card)}
             />
@@ -110,7 +80,7 @@ export default function CardSearchOverlay({ onSelect, onClose }) {
           actions={[{
             label: 'Add to Binder',
             onClick: (variant, customFoilType) => {
-              onSelect({ cardId: detailCard.id, cardImage: `${detailCard.image}/high.webp`, variant, cardName: detailCard.name, language, customFoilType })
+              onSelect({ cardId: detailCard.id, cardImage: cardImageUrl(detailCard.image), variant, cardName: detailCard.name, language, customFoilType })
               setDetailCard(null)
             },
           }]}

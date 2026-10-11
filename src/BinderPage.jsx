@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from './supabaseClient'
 import { useBinder } from './useBinder'
-import BinderGrid from './BinderGrid'
+import BinderSpread from './BinderSpread'
+import MoreMenu from './MoreMenu'
+import { useCsvTransfer, CsvImportPanel } from './CsvTransfer'
+import { useSpreadNav } from './useSpreadNav'
 import CardSearchOverlay from './CardSearchOverlay'
 import CardDetailPopup from './CardDetailPopup'
 import FindInBinderOverlay from './FindInBinderOverlay'
@@ -11,26 +14,13 @@ import BinderDeleteOverlay from './BinderDeleteOverlay'
 import ShareOverlay from './ShareOverlay'
 import SetCompletionOverlay from './SetCompletionOverlay'
 import OfflineReadyOverlay from './OfflineReadyOverlay'
-import notebookBg from './assets/binder-notebook.png'
 import BackgroundPicker from './BackgroundPicker'
-import { fontBase, pageBg, binderPageBg, NavBtn, PageNav, OverlayPanel, ButtonSkinPicker, DropdownMenu, spreadStartForPage, usePageSwipe, useSinglePageMode, LoadingScreen } from './ui'
-import { planMove, getAllBinderSlots, slotsToCsv, csvToSlots, importSlots, getBinderBackground } from './cards'
+import { fontBase, pageBg, binderPageBg, NavBtn, PageNav, ButtonSkinPicker, LoadingScreen } from './ui'
+import { planMove, getBinderBackground, slotToCard } from './binderDb'
 import { syncAllForOffline } from './offlineSync'
 import { readSlots } from './offlineCache'
 import { flushQueue } from './offlineQueue'
 import './styles.css'
-
-// A DB slot row uses snake_case; placeCard expects the camelCase card shape.
-function slotToCard(slot) {
-  return {
-    cardId: slot.card_id,
-    cardImage: slot.card_image,
-    variant: slot.variant,
-    cardName: slot.card_name,
-    language: slot.language,
-    customFoilType: slot.custom_foil_type,
-  }
-}
 
 function CardBanner({ image, onCancel, children }) {
   return (
@@ -42,34 +32,12 @@ function CardBanner({ image, onCancel, children }) {
   )
 }
 
-// [label, action key, danger?] for the "More" dropdown. Keys are overlay
-// names except 'export', which downloads immediately instead.
-const MENU_ITEMS = [
-  ['Find in Binder', 'find'],
-  ['Binders', 'switcher'],
-  ['Binder Info', 'stats'],
-  ['Share Binder', 'share'],
-  ['Set Completion', 'completion'],
-  ['Button Style', 'buttonStyle'],
-  ['Binder Background', 'background'],
-  ['Export CSV', 'export'],
-  ['Import CSV', 'import'],
-  ['Delete Binder', 'delete', true],
-]
-
-// Ten flat items overload the menu; extra space before these keys splits it
-// into navigate / info+share / customize / data / danger groups.
-const MENU_GROUP_STARTS = new Set(['stats', 'buttonStyle', 'export', 'delete'])
-
 export default function BinderPage({ userId }) {
   const {
     binderId, binderName, loading, error, fetchPage, placeCard, removeCard, findInBinder, findInAllBinders,
     listBinders, switchBinder, createBinder, renameBinder, deleteBinder, getCounts, getWorth,
     getShareToken, setShareToken, getCompletion, getSetCards,
   } = useBinder(userId)
-  // Survives a remount (alt-tab away/back can retrigger auth or reload the
-  // backgrounded tab) so the user doesn't get bounced back to page 1.
-  const [activePage, setActivePage] = useState(() => Number(sessionStorage.getItem('mush:activePage')) || 1)
   // null means "not yet loaded" (distinct from a confirmed-empty []),
   // so BinderGrid can show shimmer placeholders instead of empty-slot buttons.
   const [leftSlots, setLeftSlots] = useState(null)
@@ -86,50 +54,20 @@ export default function BinderPage({ userId }) {
   const [actionError, setActionError] = useState(null)
   const [offlineReady, setOfflineReady] = useState(false)
   const [lastPage, setLastPage] = useState(0) // highest page holding a card
-  const [pendingImport, setPendingImport] = useState(null) // { slots } | { error } | null
-  const [importing, setImporting] = useState(false)
-  const fileInputRef = useRef(null)
   const loadSeq = useRef(0)
+  // Arrow keys flip pages on desktop, except while any overlay/menu is up
+  // (Escape already belongs to those); flipping with a held/pending card
+  // stays allowed -- that's how you carry a card to another page.
+  const uiBusyRef = useRef(false)
+  // Initial page survives a remount (alt-tab away/back can retrigger auth or
+  // reload the backgrounded tab) so the user doesn't get bounced to page 1.
+  const nav = useSpreadNav({
+    initialPage: Number(sessionStorage.getItem('mush:activePage')) || 1,
+    isBusy: () => uiBusyRef.current,
+  })
+  const { activePage, goToPage } = nav
   const activePageRef = useRef(activePage)
   activePageRef.current = activePage
-  // Portrait phones show one page at a time; `half` picks which page of the
-  // already-loaded spread is visible (0 = activePage, 1 = activePage + 1),
-  // so single-page flipping never changes what data gets fetched.
-  const singlePage = useSinglePageMode()
-  const [half, setHalf] = useState(0)
-  const singlePageRef = useRef(singlePage)
-  singlePageRef.current = singlePage
-  const halfRef = useRef(half)
-  halfRef.current = half
-
-  const goToPage = useCallback((pageNumber) => {
-    const page = Math.max(1, pageNumber)
-    setActivePage(spreadStartForPage(page))
-    setHalf(page % 2 === 0 ? 1 : 0)
-  }, [])
-
-  const flip = useCallback((dir) => {
-    if (singlePageRef.current) goToPage(activePageRef.current + halfRef.current + dir)
-    else setActivePage((p) => (dir > 0 ? p + 2 : Math.max(1, p - 2)))
-  }, [goToPage])
-
-  const swipeHandlers = usePageSwipe(flip)
-
-  // Arrow keys flip pages on desktop. Ignored while any overlay/menu is up
-  // (Escape already belongs to those) or while typing in a field; flipping
-  // with a held/pending card stays allowed -- that's how you carry a card
-  // to another page.
-  const uiBusyRef = useRef(false)
-  uiBusyRef.current = !!(overlay || activeSlot || viewingSlot || menuOpen || pendingImport)
-  useEffect(() => {
-    const onKey = (e) => {
-      if (uiBusyRef.current || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return
-      if (e.key === 'ArrowRight') flip(1)
-      else if (e.key === 'ArrowLeft') flip(-1)
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [flip])
 
   const reloadPages = useCallback(async () => {
     if (!binderId) return
@@ -158,6 +96,9 @@ export default function BinderPage({ userId }) {
   useEffect(() => {
     reloadPages()
   }, [reloadPages])
+
+  const csv = useCsvTransfer(binderId, binderName, reloadPages)
+  uiBusyRef.current = !!(overlay || activeSlot || viewingSlot || menuOpen || csv.busy)
 
   useEffect(() => {
     if (!binderId) return
@@ -198,7 +139,7 @@ export default function BinderPage({ userId }) {
   }, [reloadPages])
 
   function resetForBinderChange() {
-    setActivePage(1)
+    goToPage(1)
     setActiveSlot(null)
     setPendingCard(null)
     setViewingSlot(null)
@@ -280,12 +221,12 @@ export default function BinderPage({ userId }) {
   function handleSlotView(pageNumber, slotNumber, slot) {
     if (heldCard) return runMove({ page: pageNumber, slot: slotNumber }, slotToCard(slot))
     if (pendingCard) return placeCardAt(pageNumber, slotNumber, pendingCard)
-    // ?? null: view mode must always pass a defined ownedVariant — undefined
-    // would flip CardDetailPopup into add mode and show the variant picker.
+    // slotToCard's variant is never undefined: undefined would flip
+    // CardDetailPopup into add mode and show the variant picker.
     setViewingSlot({
       pageNumber,
       slotNumber,
-      card: { ...slotToCard(slot), variant: slot.variant ?? null, language: slot.language ?? 'en' },
+      card: slotToCard(slot),
     })
   }
 
@@ -319,42 +260,9 @@ export default function BinderPage({ userId }) {
 
   function handleMenuSelect(key) {
     setMenuOpen(false)
-    if (key === 'export') return handleExportCsv()
-    if (key === 'import') return fileInputRef.current?.click()
+    if (key === 'export') return csv.exportCsv()
+    if (key === 'import') return csv.pickFile()
     setOverlay(key)
-  }
-
-  async function handleImportFile(e) {
-    const file = e.target.files?.[0]
-    e.target.value = '' // allow re-picking the same file
-    if (!file) return
-    try {
-      setPendingImport({ slots: csvToSlots(await file.text()) })
-    } catch (err) {
-      setPendingImport({ error: err.message })
-    }
-  }
-
-  async function handleConfirmImport() {
-    setImporting(true)
-    try {
-      await importSlots(binderId, pendingImport.slots)
-      setPendingImport(null)
-      await reloadPages()
-    } catch {
-      setPendingImport({ error: "Couldn't import. Check your connection and try again." })
-    }
-    setImporting(false)
-  }
-
-  async function handleExportCsv() {
-    const slots = await getAllBinderSlots(binderId)
-    const url = URL.createObjectURL(new Blob([slotsToCsv(binderName, slots)], { type: 'text/csv' }))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${binderName}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
   }
 
   async function handleSelectCard(card) {
@@ -396,72 +304,11 @@ export default function BinderPage({ userId }) {
           )}
         </span>
 
-        {/* justify-self-end anchors this row's right edge to the column's right
-            edge. The menu itself is position: fixed (flush to the viewport's
-            top-right corner, not just this row), so it can never affect this
-            row's height. To still get the "push Add Cards/More left" effect,
-            an invisible same-sized stack of the menu buttons sits in normal
-            flow reserving that width -- all stacked on the same grid cell so
-            only the widest label's width (and one button's height) counts. */}
+        {/* justify-self-end anchors this row's right edge to the column's right edge */}
         <div className="flex flex-wrap items-center justify-end justify-self-end gap-1">
           <NavBtn onClick={() => setOverlay('search')}>Add Cards</NavBtn>
           <NavBtn onClick={() => setMenuOpen((open) => !open)}>More &#9662;</NavBtn>
-          {/* Always mounted (not conditional on menuOpen) so grid-template-columns
-              can transition both ways -- 0fr collapses it to zero width when
-              closed, 1fr expands it to the invisible stack's natural width when
-              open, animating "Add Cards"/"More" sliding left as it grows.
-              0.2s ease-out matches .dropdown-menu-slide-in's timing (styles.css)
-              so the push-left and the menu's slide-in overlap instead of one
-              finishing before the other starts. */}
-          <div
-            className="grid"
-            style={{ gridTemplateColumns: menuOpen ? '1fr' : '0fr', transition: 'grid-template-columns 0.2s ease-out' }}
-          >
-            <div className="overflow-hidden" style={{ minWidth: 0 }}>
-              <div className="grid">
-                {MENU_ITEMS.map(([label], i) => (
-                  <NavBtn
-                    key={i}
-                    aria-hidden
-                    tabIndex={-1}
-                    style={{
-                      gridArea: '1 / 1',
-                      visibility: 'hidden',
-                      pointerEvents: 'none',
-                      padding: 'clamp(0.15rem, 0.7vh, 0.4rem) clamp(0.4rem, 1.8vh, 0.75rem)',
-                      fontSize: 'clamp(0.75rem, 2.2vh, 1rem)',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {label}
-                  </NavBtn>
-                ))}
-              </div>
-            </div>
-          </div>
-          {menuOpen && (
-            <DropdownMenu
-              onClose={() => setMenuOpen(false)}
-              className="dropdown-menu-slide-in fixed right-0 top-0 flex flex-col items-end"
-              style={{ gap: 'clamp(2px, 0.8vh, 8px)' }}
-            >
-              {MENU_ITEMS.map(([label, key, danger]) => (
-                <NavBtn
-                  key={key}
-                  danger={danger}
-                  onClick={() => handleMenuSelect(key)}
-                  style={{
-                    padding: 'clamp(0.15rem, 0.7vh, 0.4rem) clamp(0.4rem, 1.8vh, 0.75rem)',
-                    fontSize: 'clamp(0.75rem, 2.2vh, 1rem)',
-                    whiteSpace: 'nowrap',
-                    ...(MENU_GROUP_STARTS.has(key) && { marginTop: 'clamp(8px, 1.6vh, 16px)' }),
-                  }}
-                >
-                  {label}
-                </NavBtn>
-              ))}
-            </DropdownMenu>
-          )}
+          <MoreMenu open={menuOpen} onClose={() => setMenuOpen(false)} onSelect={handleMenuSelect} />
         </div>
       </div>
 
@@ -481,53 +328,16 @@ export default function BinderPage({ userId }) {
         </CardBanner>
       )}
 
-      <div className="binder-scale-wrap" {...swipeHandlers}>
-        {singlePage ? (
-          <div id="binderView" className={`binder-single ${half ? 'binder-single--right' : ''}`}>
-            <img src={notebookBg} alt="" className="binder-notebook-bg" aria-hidden="true" />
-            <div className="binder-page-single">
-              <BinderGrid
-                pageNumber={activePage + half}
-                slots={half ? rightSlots : leftSlots}
-                heldCard={heldCard}
-                onSlotChoose={handleSlotChoose}
-                onSlotView={handleSlotView}
-              />
-            </div>
-          </div>
-        ) : (
-          <div id="binderView">
-            <img src={notebookBg} alt="" className="binder-notebook-bg" aria-hidden="true" />
-            <div className="binder-page-left">
-              <BinderGrid
-                pageNumber={activePage}
-                slots={leftSlots}
-                heldCard={heldCard}
-                onSlotChoose={handleSlotChoose}
-                onSlotView={handleSlotView}
-              />
-            </div>
-            <div className="binder-page-right">
-              <BinderGrid
-                pageNumber={activePage + 1}
-                slots={rightSlots}
-                heldCard={heldCard}
-                onSlotChoose={handleSlotChoose}
-                onSlotView={handleSlotView}
-              />
-            </div>
-          </div>
-        )}
-      </div>
-
-      <PageNav
-        page={singlePage ? activePage + half : (activePage + 1) / 2}
-        total={lastPage ? (singlePage ? lastPage : Math.ceil(lastPage / 2)) : null}
-        onPrev={() => flip(-1)}
-        onNext={() => flip(1)}
-        prevDisabled={activePage <= 1 && (!singlePage || half === 0)}
-        onJump={(n) => (singlePage ? goToPage(n) : setActivePage(n * 2 - 1))}
+      <BinderSpread
+        nav={nav}
+        leftSlots={leftSlots}
+        rightSlots={rightSlots}
+        heldCard={heldCard}
+        onSlotChoose={handleSlotChoose}
+        onSlotView={handleSlotView}
       />
+
+      <PageNav {...nav.pageNavProps(lastPage)} />
 
       {(activeSlot || overlay === 'search') && (
         <CardSearchOverlay
@@ -617,34 +427,7 @@ export default function BinderPage({ userId }) {
         />
       )}
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".csv,text/csv"
-        onChange={handleImportFile}
-        className="hidden"
-      />
-
-      {pendingImport && (
-        <OverlayPanel onClose={() => setPendingImport(null)} panelStyle={{ minWidth: 280, maxWidth: 400 }}>
-          {pendingImport.error ? (
-            <p className="card-search-error">{pendingImport.error}</p>
-          ) : (
-            <p>
-              Import {pendingImport.slots.length} card{pendingImport.slots.length === 1 ? '' : 's'} into
-              &quot;{binderName}&quot;? Cards already in those slots will be replaced.
-            </p>
-          )}
-          <div className="flex items-center gap-2">
-            {!pendingImport.error && (
-              <NavBtn onClick={handleConfirmImport} disabled={importing}>
-                {importing ? '...' : 'Import'}
-              </NavBtn>
-            )}
-            <NavBtn onClick={() => setPendingImport(null)}>{pendingImport.error ? 'Close' : 'Cancel'}</NavBtn>
-          </div>
-        </OverlayPanel>
-      )}
+      <CsvImportPanel {...csv.panelProps} />
     </div>
   )
 }

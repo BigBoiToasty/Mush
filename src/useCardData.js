@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchCard, cardKey } from './cards'
+import { fetchCard, cardKey } from './tcgdex'
 
 // Module-level, not component state: shared across every CardSlot/
 // CardDetailPopup instance so flipping back to an already-visited binder

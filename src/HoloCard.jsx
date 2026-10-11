@@ -1,6 +1,7 @@
 import { useHoloPointer } from './holoPointer'
 import { guessFoilType } from './foilHeuristic'
 import FadeImg from './FadeImg'
+import { cardImageUrl } from './tcgdex'
 
 // Maps TCGdex card data + our custom_foil_type override to the DOM shape
 // simeydotme/pokemon-cards-css's selectors expect (see public/css/cards/*.css
@@ -69,7 +70,7 @@ export default function HoloCard({ card, customFoilType, ownedVariant, onClick, 
           aria-label={ariaLabel || card.name}
         >
           <div className="card__front">
-            <FadeImg src={imageSrc || (card.image ? `${card.image}/high.webp` : 'fallback.png')} alt={card.name} />
+            <FadeImg src={imageSrc || (card.image ? cardImageUrl(card.image) : 'fallback.png')} alt={card.name} />
             <div className="card__shine"></div>
             <div className="card__glare"></div>
           </div>

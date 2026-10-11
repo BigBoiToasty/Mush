@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { OverlayPanel, NavBtn, useAsync } from './ui'
 import CardDetailPopup from './CardDetailPopup'
+import { cardImageUrl } from './tcgdex'
 
 const listPanelStyle = { minWidth: 320, maxHeight: '70vh', overflowY: 'auto' }
 
@@ -59,7 +60,7 @@ export default function SetCompletionOverlay({ getCompletion, getSetCards, onClo
                     className="flex flex-col items-center gap-1"
                     style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'inherit', font: 'inherit' }}
                   >
-                    <img src={`${card.image}/low.webp`} alt={card.name} />
+                    <img src={cardImageUrl(card.image, 'low')} alt={card.name} />
                     <span>{card.owned ? '✓' : '✗'} {card.name}</span>
                   </button>
                   {card.owned && (
@@ -98,7 +99,7 @@ export default function SetCompletionOverlay({ getCompletion, getSetCards, onClo
                 setDetailCard(null)
                 onAddCard({
                   cardId: detailCard.id,
-                  cardImage: `${detailCard.image}/high.webp`,
+                  cardImage: cardImageUrl(detailCard.image),
                   cardName: detailCard.name,
                   variant,
                   language: viewingSet.language,

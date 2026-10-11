@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { planMove, cardUrl, hasCJK, pickByExactName, groupOwnedCardsBySet, annotateSetCards, slotsToCsv, csvToSlots } from './cards'
+import { planMove } from './binderDb'
+import { cardUrl, hasCJK, pickByExactName } from './tcgdex'
+import { groupOwnedCardsBySet, annotateSetCards } from './sets'
+import { slotsToCsv, csvToSlots } from './csv'
 
 describe('hasCJK', () => {
   it('detects Japanese and Chinese text', () => {

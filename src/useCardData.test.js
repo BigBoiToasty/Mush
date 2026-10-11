@@ -4,11 +4,11 @@ import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { useCardData } from './useCardData'
 
-vi.mock('./cards', () => ({
+vi.mock('./tcgdex', () => ({
   cardKey: (language, cardId) => `${language}|${cardId}`,
   fetchCard: vi.fn(),
 }))
-import { fetchCard } from './cards'
+import { fetchCard } from './tcgdex'
 
 // Mounts useCardData in a bare component and exposes its latest return value.
 function mountHook(cardId, language) {

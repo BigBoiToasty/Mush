@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getBinders, createBinders, renameBinders, deleteBinders, getCards, saveCards, deleteCard, findCardsByName, findCardsByNameAllBinders, backfillCardNames, getBinderCounts, getBinderWorth, getBinderShareToken, setBinderShareToken, getSetCompletion, getSetCards } from './cards'
+import { getBinders, createBinders, renameBinders, deleteBinders, getCards, saveCards, deleteCard, findCardsByName, findCardsByNameAllBinders, backfillCardNames, getBinderCounts, getBinderWorth, getBinderShareToken, setBinderShareToken, cardToSlot } from './binderDb'
+import { getSetCompletion, getSetCards } from './sets'
 import { writeOrQueue } from './offlineQueue'
 
 // Shares one in-flight lookup-or-create promise per userId, so two concurrent
@@ -63,17 +64,7 @@ export function useBinder(userId) {
   // offlineQueue); a thrown error here means a real server-side failure.
   const placeCard = useCallback(async (pageNumber, slotNumber, card) => {
     if (!binderId) return
-    const slot = {
-      binder_id: binderId,
-      page_number: pageNumber,
-      slot_number: slotNumber,
-      card_id: card.cardId,
-      card_image: card.cardImage,
-      variant: card.variant ?? null,
-      card_name: card.cardName ?? null,
-      language: card.language ?? 'en',
-      custom_foil_type: card.customFoilType ?? null,
-    }
+    const slot = cardToSlot(binderId, pageNumber, slotNumber, card)
     await writeOrQueue({ type: 'place', slot }, () => saveCards(slot))
   }, [binderId])
 

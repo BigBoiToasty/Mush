@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import cardImg from './assets/login-card.png'
 import pageFlipSprite from './assets/page-flip.png'
 import sableyeShow from './assets/sableye-show.webp'
@@ -240,34 +240,6 @@ function CardFace({
 }
 
 
-// Turnstile's widget is a fixed 300x65px iframe. On the login face it sits to
-// the right of the Login button, so shrink it to fit the space left in the
-// card (about half its width) on narrow screens.
-const TURNSTILE_W = 300
-function TurnstileBesideLogin({ cardRef, ...props }) {
-  const [scale, setScale] = useState(1)
-  useEffect(() => {
-    const card = cardRef.current
-    if (!card) return
-    const fit = () => setScale(Math.min(1, (card.clientWidth * 0.5) / TURNSTILE_W))
-    fit()
-    const ro = new ResizeObserver(fit)
-    ro.observe(card)
-    return () => ro.disconnect()
-  }, [cardRef])
-  return (
-    <div style={{
-      position: 'absolute',
-      left: '38%',
-      top: `calc(${t.layout.buttons.login.top} + 2.6cqw)`, // vertical centre of the Login button
-      transform: `translateY(-50%) scale(${scale})`,
-      transformOrigin: 'left center',
-    }}>
-      <Turnstile {...props} />
-    </div>
-  )
-}
-
 export default function LoginCard() {
   const [showPw, setShowPw] = useState(false)
   const [showConfirmPw, setShowConfirmPw] = useState(false)
@@ -279,7 +251,6 @@ export default function LoginCard() {
   const [loading, setLoading] = useState(false)
   const [captchaToken, setCaptchaToken] = useState(null)
   const [captchaReset, setCaptchaReset] = useState(0)
-  const cardRef = useRef(null)
 
   // Supabase rejects password sign-in/sign-up without a Turnstile token once
   // captcha is enabled server-side; Google sign-in doesn't need one.
@@ -353,7 +324,7 @@ export default function LoginCard() {
         >
           Mush — Online Pokémon Card Binder
         </h1>
-        <div ref={cardRef} className="@container relative overflow-hidden aspect-[645/400] w-full">
+        <div className="@container relative overflow-hidden aspect-[645/400] w-full">
         <CardFace
           mode={mode}
           showPw={showPw}
@@ -374,10 +345,12 @@ export default function LoginCard() {
           onToggleConfirmPw={() => setShowConfirmPw((v) => !v)}
           onFlip={() => setMode(mode === 'login' ? 'signup' : 'login')}
         />
-        {mode === 'login' && <TurnstileBesideLogin cardRef={cardRef} onToken={setCaptchaToken} resetKey={captchaReset} />}
         </div>
-        {/* Sign-up face has no free space beside its button, so the widget goes under the card there */}
-        {mode === 'signup' && <Turnstile onToken={setCaptchaToken} resetKey={captchaReset} />}
+        {/* One widget for both faces, in a slot sized to it (300x65) so the
+            notebook doesn't shift when the widget loads or the card flips */}
+        <div style={{ minHeight: 65, display: 'flex', justifyContent: 'center' }}>
+          <Turnstile onToken={setCaptchaToken} resetKey={captchaReset} />
+        </div>
       </div>
     </div>
   )

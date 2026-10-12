@@ -16,6 +16,11 @@ import Turnstile, { TURNSTILE_SITE_KEY } from './Turnstile'
 // ALL tweakable values live in theme.js — edit there.
 const t = theme
 
+// Google sign-in is off on the self-hosted Supabase until a Google OAuth
+// client is set up; the button stays hidden until then. Set
+// VITE_GOOGLE_SIGNIN=true in .env.production (and rebuild) to show it.
+const GOOGLE_SIGNIN = import.meta.env.VITE_GOOGLE_SIGNIN === 'true'
+
 // Shared pixel-frame look for inputs and buttons.
 const frameBox = pixelFrame(t.frame.width)
 
@@ -138,7 +143,7 @@ function CardFace({
         className="absolute"
       />
       {/* Google sign-in — login only, right of the username field */}
-      {!isSignup && (
+      {!isSignup && GOOGLE_SIGNIN && (
         <button type="button" onClick={onGoogleLogin} disabled={loading} style={btnStyle(t.layout.buttons.google)} className={btnCls}>
           <img
             src={googleG}

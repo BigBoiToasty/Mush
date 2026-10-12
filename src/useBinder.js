@@ -21,7 +21,8 @@ function initBinder(userId) {
       const binders = await getBinders(userId)
       if (binders.length === 0) return createBinders('My Binder', userId)
       const lastId = sessionStorage.getItem(lastBinderKey(userId))
-      return binders.find((b) => b.id === lastId) ?? binders[0]
+      // sessionStorage holds strings; binder ids are numbers
+      return binders.find((b) => String(b.id) === lastId) ?? binders[0]
     })().finally(() => binderInit.delete(userId))
     binderInit.set(userId, promise)
   }

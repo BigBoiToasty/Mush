@@ -1,0 +1,33 @@
+/* simeydotme/pokemon-cards-css holo effect (GPL-3.0, see /LICENSE), bundled
+   into the app's stylesheet. Order matters: base.css sets up the .card__*
+   structure and defaults.css must load after it (own :root vars pokemontcg's
+   app normally sets via Svelte component styles); the per-rarity files just
+   add data-rarity[=] overrides on top and can load in any order. Texture
+   images stay in public/img and are referenced by absolute /img/ paths. */
+@import "./cards/base.css";
+@import "./cards/defaults.css";
+@import "./cards.css";
+@import "./cards/basic.css";
+@import "./cards/reverse-holo.css";
+@import "./cards/regular-holo.css";
+@import "./cards/cosmos-holo.css";
+@import "./cards/amazing-rare.css";
+@import "./cards/radiant-holo.css";
+@import "./cards/v-regular.css";
+@import "./cards/v-full-art.css";
+@import "./cards/v-max.css";
+@import "./cards/v-star.css";
+@import "./cards/trainer-full-art.css";
+@import "./cards/rainbow-holo.css";
+@import "./cards/rainbow-alt.css";
+@import "./cards/secret-rare.css";
+@import "./cards/trainer-gallery-holo.css";
+@import "./cards/trainer-gallery-v-regular.css";
+@import "./cards/trainer-gallery-v-max.css";
+@import "./cards/trainer-gallery-secret-rare.css";
+@import "./cards/shiny-rare.css";
+@import "./cards/shiny-v.css";
+@import "./cards/shiny-vmax.css";
+@import "./cards/swsh-pikachu.css";
+@import "./cards/pointer-transition.css";
+@import "./cards/clip-era.css";

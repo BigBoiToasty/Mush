@@ -193,7 +193,7 @@
 .card:not(.masked)[data-rarity="radiant rare"] .card__shine:after {
 
   --mask: none;
-  --foil: url("/img/trainerbg.png"); 
+  --foil: url("/img/trainerbg.webp"); 
   --imgsize: 25% auto;
 
 }

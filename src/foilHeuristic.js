@@ -5,7 +5,7 @@
 // upgraded from a flat card.rarity.toLowerCase() to actually guess eras.
 //
 // Two deviations from a literal implementation, both because the target CSS
-// (public/css/cards/*.css, ported from the real library) doesn't support
+// (src/holo/cards/*.css, ported from the real library) doesn't support
 // what a naive mapping would produce:
 //  - "rare holo galaxy" isn't a real effect in the library -- only
 //    cosmos-holo.css exists (data-rarity="rare holo cosmos"). EX/DP-era

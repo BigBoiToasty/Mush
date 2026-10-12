@@ -149,7 +149,7 @@
 .card:not(.masked)[data-rarity="rare holo vstar"] .card__shine:after {
 
   --mask: none;
-  --foil: url("/img/ancient.png"); 
+  --foil: url("/img/ancient.webp"); 
   --imgsize: 18% 15%;
 
   background-blend-mode: exclusion, hue, hard-light;

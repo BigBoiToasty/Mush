@@ -2,27 +2,16 @@ import { useState } from 'react'
 import { supabase } from './supabaseClient'
 import cardImg from './assets/notepad-vertical.png'
 import { theme } from './theme'
-import { TIDE_BG, FRAME } from './pixelArt'
+import { fontBase, frameBox as pixelFrame } from './frameStyles'
+import { pageBg } from './ui'
 
 // Same notebook look as LoginCard, but on a vertical notepad (the login-card
 // artwork rotated and shortened). The card is narrower than the login card, so
 // layout/font values are local cqw/% tuned for the 800x891 portrait art rather
 // than theme.layout's landscape coordinates.
 const t = theme
-const fontBase = { fontFamily: t.font.family, letterSpacing: t.font.letterSpacing }
 
-const frameBox = {
-  ...fontBase,
-  color: t.colors.inputText,
-  backgroundColor: t.colors.inputCorner,
-  borderStyle: 'solid',
-  borderWidth: '2.2cqw',
-  borderImageSource: FRAME,
-  borderImageSlice: `${t.frame.slice} fill`,
-  borderImageRepeat: 'stretch',
-  imageRendering: 'pixelated',
-  outline: 'none',
-}
+const frameBox = pixelFrame('2.2cqw')
 
 export default function UsernamePrompt({ session, onUsernameSet }) {
   const [username, setUsername] = useState('')
@@ -49,7 +38,7 @@ export default function UsernamePrompt({ session, onUsernameSet }) {
   return (
     <div
       className="flex min-h-screen items-center justify-center"
-      style={{ background: TIDE_BG, backgroundSize: 'cover', imageRendering: 'pixelated' }}
+      style={pageBg}
     >
       <form
         onSubmit={handleSubmit}

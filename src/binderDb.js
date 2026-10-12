@@ -1,5 +1,35 @@
+// Every Supabase read and write for binders, slots, profiles and share links.
 import { supabase } from './supabaseClient'
 import { cacheSlots, readSlots, readAllSlots, cacheBinders, readBinders } from './offlineCache'
+import { fetchCard, cardKey } from './tcgdex'
+import { extractCardPrice } from './pricing'
+
+// A slot row as stored (snake_case) <-> the card shape the UI passes around
+// (camelCase). The only two places that know both spellings.
+export function slotToCard(slot) {
+  return {
+    cardId: slot.card_id,
+    cardImage: slot.card_image,
+    variant: slot.variant ?? null,
+    cardName: slot.card_name,
+    language: slot.language ?? 'en',
+    customFoilType: slot.custom_foil_type,
+  }
+}
+
+export function cardToSlot(binderId, pageNumber, slotNumber, card) {
+  return {
+    binder_id: binderId,
+    page_number: pageNumber,
+    slot_number: slotNumber,
+    card_id: card.cardId,
+    card_image: card.cardImage,
+    variant: card.variant ?? null,
+    card_name: card.cardName ?? null,
+    language: card.language ?? 'en',
+    custom_foil_type: card.customFoilType ?? null,
+  }
+}
 
 // Offline fallback for both find functions below: same case-insensitive
 // substring match Postgres's ilike does, ordered the same way (by page).
@@ -13,59 +43,6 @@ function searchSlotsOffline(slots, query) {
 // Escape LIKE metacharacters so a user-typed % or _ matches literally
 // instead of acting as a wildcard.
 const escapeLike = (query) => query.replace(/[\\%_]/g, '\\$&')
-
-// The same physical card has a different ID per language database, so
-// anything keyed by card must be keyed by (language, card_id).
-export const cardKey = (language, cardId) => `${language}|${cardId}`
-
-// One card's tcgdex JSON, or null on any failure -- every caller is a
-// best-effort path (pricing, rarity, backfill) that degrades gracefully.
-export async function fetchCard(language, cardId) {
-  try {
-    const response = await fetch(cardUrl(language, cardId))
-    return response.ok ? await response.json() : null
-  } catch {
-    return null
-  }
-}
-
-//  LANGUAGE STUFF
-
-// tcgdex serves each language at its own path and gives the same physical card
-// different IDs per language, so every slot stores the language it came from.
-export const LANGUAGES = [
-  { code: 'en', label: 'English' },
-  { code: 'ja', label: 'Japanese' },
-  { code: 'zh-cn', label: 'Chinese (Simplified)' },
-  { code: 'zh-tw', label: 'Chinese (Traditional)' },
-]
-
-const LANGUAGE_CODES = new Set(LANGUAGES.map((l) => l.code))
-
-// Allowlist the language before it reaches the URL: it comes from stored rows
-// and a search dropdown, so an unexpected value falls back to en rather than
-// being interpolated into the request path.
-export function cardUrl(language, cardId) {
-  const lang = LANGUAGE_CODES.has(language) ? language : 'en'
-  return `https://api.tcgdex.net/v2/${lang}/cards/${encodeURIComponent(cardId)}`
-}
-
-// True when text contains Japanese kana or CJK ideographs. Lets search tell a
-// native-language query (search that language by name directly) from an English
-// one (bridge to the target language through the Pokedex number).
-export function hasCJK(text) {
-  return /[぀-ヿ㐀-鿿豈-﫿ｦ-ﾟ]/.test(text)
-}
-
-// tcgdex name search is a "contains" match, so prefer a card whose name equals
-// the query exactly (case-insensitive) -- otherwise "Mew" would resolve through
-// a Mewtwo card. Falls back to the first result.
-export function pickByExactName(cards, name) {
-  const lower = name.toLowerCase()
-  return cards.find((c) => c.name?.toLowerCase() === lower) ?? cards[0]
-}
-
-//  CARD STUFF
 
 export async function getCards(binderId, pageNumber) {
   const { data, error } = await supabase
@@ -163,39 +140,6 @@ export async function findCardsByNameAllBinders(userId, query) {
   return data.map((slot) => ({ ...slot, binder_name: namesById.get(slot.binder_id) }))
 }
 
-// card.variants uses tcgdex's own vocabulary (normal/holo/reverse/
-// firstEdition/wPromo); card.pricing.tcgplayer uses TCGplayer's own SKU
-// names, which don't match ("holo" -> "holofoil", "reverse" ->
-// "reverse-holofoil", etc -- confirmed against the live API). Without this
-// map, `variants[variant]` silently misses and falls back to the wrong
-// price whenever the selected variant isn't literally "normal".
-const TCGPLAYER_KEYS_BY_VARIANT = {
-  normal: ['normal'],
-  holo: ['holofoil', 'unlimited-holofoil'],
-  reverse: ['reverse-holofoil'],
-  firstEdition: ['1st-edition-holofoil', '1st-edition-normal'],
-  wPromo: ['normal'],
-}
-
-// Finds the TCGplayer pricing entry to show/use: the owned/selected
-// variant's when priced, else any priced variant. Returns [variantKey, entry].
-export function pickTcgplayerEntry(tcgplayer, variant) {
-  if (!tcgplayer) return undefined
-  const { updated, ...variants } = tcgplayer
-  for (const key of TCGPLAYER_KEYS_BY_VARIANT[variant] ?? []) {
-    if (variants[key]?.marketPrice != null) return [key, variants[key]]
-  }
-  return Object.entries(variants).find(([, v]) => v?.marketPrice != null)
-}
-
-// Picks one number to represent a card's value: the owned variant's
-// TCGplayer market price when available, else any priced TCGplayer
-// variant, else null (no Cardmarket fallback -- TCGplayer only, by request).
-export function extractCardPrice(card, variant) {
-  const entry = pickTcgplayerEntry(card.pricing?.tcgplayer, variant)
-  return entry ? entry[1].marketPrice : null
-}
-
 // One backfill attempt per binder per session; new placements write
 // card_name themselves, so this only exists to name legacy rows.
 const backfilledBinders = new Set()
@@ -230,29 +174,35 @@ export async function backfillCardNames(binderId) {
   }))
 }
 
-export async function getBinderCounts(binderId) {
+// Highest page holding a card (0 for an empty binder) -- one row, not the
+// whole binder, since "Page X / Y" refreshes on every page flip.
+export async function getLastPage(binderId) {
   const { data, error } = await supabase
     .from('binder_slots')
     .select('page_number')
     .eq('binder_id', binderId)
+    .order('page_number', { ascending: false })
+    .limit(1)
 
-  if (error || !data) return { cardCount: 0, pageCount: 0 }
+  if (error || !data?.length) return 0
+  return data[0].page_number
+}
 
-  return {
-    cardCount: data.length,
-    pageCount: data.length ? Math.max(...data.map((slot) => slot.page_number)) : 0,
-  }
+export async function getBinderCounts(binderId) {
+  const [{ count, error }, pageCount] = await Promise.all([
+    supabase.from('binder_slots').select('*', { count: 'exact', head: true }).eq('binder_id', binderId),
+    getLastPage(binderId),
+  ])
+
+  if (error) return { cardCount: 0, pageCount: 0 }
+  return { cardCount: count ?? 0, pageCount }
 }
 
 // Fetches live pricing for every unique card in the binder (one API call
 // per unique card, not per slot) and sums each slot's owned-variant price.
 export async function getBinderWorth(binderId) {
-  const { data, error } = await supabase
-    .from('binder_slots')
-    .select('card_id, variant, language')
-    .eq('binder_id', binderId)
-
-  if (error || !data?.length) return 0
+  const data = await getAllBinderSlots(binderId)
+  if (!data.length) return 0
 
   const key = (slot) => cardKey(slot.language, slot.card_id)
   const pairs = [...new Map(data.map((slot) => [key(slot), slot])).values()]
@@ -267,88 +217,6 @@ export async function getBinderWorth(binderId) {
     return card ? sum + (extractCardPrice(card, slot.variant) ?? 0) : sum
   }, 0)
 }
-
-// Pure: turns a same-index-aligned (pairs, cards) pair into one summary row
-// per detected set. A null card (fetch failure) or missing card.set is
-// skipped rather than counted, so a flaky tcgdex response can't undercount
-// a set's total or misplace a card into the wrong set.
-export function groupOwnedCardsBySet(pairs, cards) {
-  const setsById = new Map()
-  cards.forEach((card, i) => {
-    if (!card?.set?.id) return
-    const language = pairs[i].language
-    const key = `${language}|${card.set.id}`
-    if (!setsById.has(key)) {
-      setsById.set(key, {
-        setId: card.set.id,
-        setName: card.set.name,
-        language,
-        ownedCardIds: new Set(),
-        ownedCardPages: new Map(),
-        totalCount: card.set.cardCount?.official ?? 0,
-      })
-    }
-    const s = setsById.get(key)
-    s.ownedCardIds.add(card.id)
-    s.ownedCardPages.set(card.id, pairs[i].pages)
-  })
-
-  return [...setsById.values()].map((s) => ({
-    setId: s.setId,
-    setName: s.setName,
-    language: s.language,
-    ownedCount: s.ownedCardIds.size,
-    totalCount: s.totalCount,
-    ownedCardIds: s.ownedCardIds,
-    ownedCardPages: s.ownedCardPages,
-  }))
-}
-
-// One batched fetch per unique owned (language, card_id) -- the same
-// per-card tcgdex response already used for pricing includes card.set, so
-// this needs no network calls beyond what getBinderWorth already makes.
-export async function getSetCompletion(binderId) {
-  const slots = await getAllBinderSlots(binderId)
-  if (!slots.length) return []
-
-  // A card can occupy more than one slot (duplicates); track every page it's
-  // on so the completion view can point at each copy.
-  const entryByKey = new Map()
-  for (const s of slots) {
-    const key = cardKey(s.language, s.card_id)
-    if (!entryByKey.has(key)) entryByKey.set(key, { language: s.language, card_id: s.card_id, pages: [] })
-    entryByKey.get(key).pages.push(s.page_number)
-  }
-  const pairs = [...entryByKey.values()]
-  pairs.forEach((p) => p.pages.sort((a, b) => a - b))
-
-  const cards = await Promise.all(pairs.map(({ language, card_id }) => fetchCard(language, card_id)))
-
-  return groupOwnedCardsBySet(pairs, cards)
-}
-
-// Pure: the full set card list, each card flagged with whether it's owned
-// and (if so) every binder page it's on -- a card can be a duplicate.
-export function annotateSetCards(setCards, ownedCardPages) {
-  return setCards.map((c) => ({
-    ...c,
-    owned: ownedCardPages.has(c.id),
-    pages: ownedCardPages.get(c.id) ?? [],
-  }))
-}
-
-// Called lazily, one set at a time, when a user opens it -- a binder
-// spanning many sets must not fire one request per set just to open the
-// tracker overlay.
-export async function getSetCards(setId, language, ownedCardPages) {
-  const lang = LANGUAGE_CODES.has(language) ? language : 'en'
-  const response = await fetch(`https://api.tcgdex.net/v2/${lang}/sets/${encodeURIComponent(setId)}`)
-  if (!response.ok) throw new Error(`Failed to load set ${setId}`)
-  const data = await response.json()
-  return annotateSetCards(data.cards, ownedCardPages)
-}
-
-//  BINDER STUFF
 
 export async function getBinders(userId) {
   const { data, error } = await supabase
@@ -457,84 +325,6 @@ export async function uploadBinderBackground(userId, binderId, file) {
   return data.publicUrl
 }
 
-// Pure: CSV of a binder's slots, sorted by page/slot. Fields are quoted per
-// RFC 4180 so card names with commas or quotes survive a spreadsheet import.
-// card_image is included so the file is a restorable backup (csvToSlots),
-// not just a snapshot.
-export function slotsToCsv(binderName, slots) {
-  const esc = (value) => {
-    const s = String(value ?? '')
-    return /[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s
-  }
-  const rows = [...slots]
-    .sort((a, b) => a.page_number - b.page_number || a.slot_number - b.slot_number)
-    .map((s) =>
-      [binderName, s.page_number, s.slot_number, s.card_id, s.card_name, s.variant, s.language, s.card_image]
-        .map(esc).join(','))
-  return ['binder,page,slot,card_id,card_name,variant,language,card_image', ...rows].join('\n')
-}
-
-// Pure: RFC 4180 CSV text -> rows of string fields. Handles quoted fields
-// containing commas, doubled quotes, and newlines; accepts \n or \r\n.
-function parseCsv(text) {
-  const rows = [[]]
-  let field = ''
-  let inQuotes = false
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i]
-    if (inQuotes) {
-      if (c !== '"') field += c
-      else if (text[i + 1] === '"') { field += '"'; i++ }
-      else inQuotes = false
-    } else if (c === '"') {
-      inQuotes = true
-    } else if (c === ',') {
-      rows[rows.length - 1].push(field)
-      field = ''
-    } else if (c === '\n' || c === '\r') {
-      if (c === '\r' && text[i + 1] === '\n') i++
-      rows[rows.length - 1].push(field)
-      field = ''
-      rows.push([])
-    } else {
-      field += c
-    }
-  }
-  rows[rows.length - 1].push(field)
-  const last = rows[rows.length - 1]
-  if (last.length === 1 && last[0] === '') rows.pop() // trailing newline
-  return rows
-}
-
-// Pure: parse an exported CSV back into slot rows for import. Header-driven,
-// so column order doesn't matter and extra columns (like binder) are ignored.
-// Throws with a row-numbered message on anything that can't become a slot.
-export function csvToSlots(text) {
-  const rows = parseCsv(text)
-  const header = rows.shift() ?? []
-  const idx = Object.fromEntries(header.map((h, i) => [h.trim(), i]))
-  for (const col of ['page', 'slot', 'card_id', 'card_image']) {
-    if (idx[col] === undefined) throw new Error(`Missing "${col}" column -- is this a Mush export?`)
-  }
-  return rows.map((r, n) => {
-    const page = Number(r[idx.page])
-    const slot = Number(r[idx.slot])
-    if (!Number.isInteger(page) || page < 1 || !Number.isInteger(slot) || slot < 0 || slot > 8
-      || !r[idx.card_id] || !r[idx.card_image]) {
-      throw new Error(`Row ${n + 2} is not a valid card row`)
-    }
-    return {
-      page_number: page,
-      slot_number: slot,
-      card_id: r[idx.card_id],
-      card_image: r[idx.card_image],
-      card_name: r[idx.card_name] || null,
-      variant: r[idx.variant] || null,
-      language: r[idx.language] || 'en',
-    }
-  })
-}
-
 // Bulk upsert for CSV import -- one request for the whole file. Same
 // conflict target as saveCards, so imported rows replace occupied slots.
 export async function importSlots(binderId, slots) {
@@ -635,4 +425,3 @@ export async function getSharedBinderSlots(token, pageNumber) {
 
   return data
 }
-

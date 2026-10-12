@@ -1,4 +1,4 @@
-import { saveCards, deleteCard } from './cards'
+import { saveCards, deleteCard } from './binderDb'
 import { readQueue, writeQueue, readSlots, cacheSlots } from './offlineCache'
 
 // Offline write queue: when a place/remove can't reach Supabase, the op is

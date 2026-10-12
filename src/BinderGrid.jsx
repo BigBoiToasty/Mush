@@ -17,7 +17,7 @@ export default function BinderGrid({ pageNumber, slots, heldCard, onSlotChoose, 
   // empty-slot buttons, which would falsely claim the page is confirmed empty.
   if (slots === null) {
     return (
-      <div className="testGallery">
+      <div className="binder-grid">
         {Array.from({ length: 9 }, (_, i) => (
           <div key={i} className="box">
             <div className="loading-box"><LoadingDots /></div>
@@ -28,7 +28,7 @@ export default function BinderGrid({ pageNumber, slots, heldCard, onSlotChoose, 
   }
   const bySlot = slotsByNumber(slots)
   return (
-    <div className="testGallery">
+    <div className="binder-grid">
       {bySlot.map((slot, i) => (
         <CardSlot
           key={i}

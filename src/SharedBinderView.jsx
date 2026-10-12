@@ -1,15 +1,15 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import BinderGrid from './BinderGrid'
+import { useState, useEffect, useCallback } from 'react'
+import BinderSpread from './BinderSpread'
 import CardDetailPopup from './CardDetailPopup'
-import notebookBg from './assets/binder-notebook.png'
-import { fontBase, pageBg, NavBtn, PageNav, spreadStartForPage, usePageSwipe, useSinglePageMode, useDismiss } from './ui'
+import { fontBase, pageBg, NavBtn, PageNav, useDismiss } from './ui'
+import { useSpreadNav } from './useSpreadNav'
+import { thumbnailUrl } from './tcgdex'
 import { cacheShared, readShared } from './offlineCache'
-import { getSharedBinder, getSharedBinderSlots, searchSharedBinder } from './cards'
+import { getSharedBinder, getSharedBinderSlots, searchSharedBinder, slotToCard } from './binderDb'
 import './styles.css'
 
 export default function SharedBinderView({ token }) {
   const [binder, setBinder] = useState(undefined) // undefined = loading, null = not found
-  const [activePage, setActivePage] = useState(1)
   const [leftSlots, setLeftSlots] = useState([])
   const [rightSlots, setRightSlots] = useState([])
   const [viewingSlot, setViewingSlot] = useState(null)
@@ -21,26 +21,8 @@ export default function SharedBinderView({ token }) {
   // Registered for the page's lifetime (the search overlay is inline JSX, not
   // its own component); dismissing while closed is a no-op.
   const onSearchBackdropClick = useDismiss(() => setSearchOpen(false))
-  // Same portrait-phone single-page fold as BinderPage.
-  const singlePage = useSinglePageMode()
-  const [half, setHalf] = useState(0)
-  const singlePageRef = useRef(singlePage)
-  singlePageRef.current = singlePage
-  const stateRef = useRef({ activePage, half })
-  stateRef.current = { activePage, half }
-
-  const goToPage = useCallback((pageNumber) => {
-    const page = Math.max(1, pageNumber)
-    setActivePage(spreadStartForPage(page))
-    setHalf(page % 2 === 0 ? 1 : 0)
-  }, [])
-
-  const flip = useCallback((dir) => {
-    if (singlePageRef.current) goToPage(stateRef.current.activePage + stateRef.current.half + dir)
-    else setActivePage((p) => (dir > 0 ? p + 2 : Math.max(1, p - 2)))
-  }, [goToPage])
-
-  const swipeHandlers = usePageSwipe(flip)
+  const nav = useSpreadNav({ isBusy: () => searchOpen || !!viewingSlot })
+  const { activePage, goToPage } = nav
 
   useEffect(() => {
     let cancelled = false
@@ -79,7 +61,7 @@ export default function SharedBinderView({ token }) {
 
   function handleSlotView(pageNumber, slotNumber, slot) {
     if (!slot) return
-    setViewingSlot({ cardId: slot.card_id, variant: slot.variant ?? null, language: slot.language ?? 'en' })
+    setViewingSlot(slotToCard(slot))
   }
 
   async function handleSearch(e) {
@@ -115,34 +97,9 @@ export default function SharedBinderView({ token }) {
     <div className="flex h-screen flex-col items-center gap-4 overflow-hidden p-4" style={{ ...fontBase, ...pageBg }}>
       <span className="text-base font-semibold text-white">{binder.name}</span>
 
-      <div className="binder-scale-wrap" {...swipeHandlers}>
-        {singlePage ? (
-          <div id="binderView" className={`binder-single ${half ? 'binder-single--right' : ''}`}>
-            <img src={notebookBg} alt="" className="binder-notebook-bg" aria-hidden="true" />
-            <div className="binder-page-single">
-              <BinderGrid pageNumber={activePage + half} slots={half ? rightSlots : leftSlots} heldCard={null} onSlotView={handleSlotView} />
-            </div>
-          </div>
-        ) : (
-          <div id="binderView">
-            <img src={notebookBg} alt="" className="binder-notebook-bg" aria-hidden="true" />
-            <div className="binder-page-left">
-              <BinderGrid pageNumber={activePage} slots={leftSlots} heldCard={null} onSlotView={handleSlotView} />
-            </div>
-            <div className="binder-page-right">
-              <BinderGrid pageNumber={activePage + 1} slots={rightSlots} heldCard={null} onSlotView={handleSlotView} />
-            </div>
-          </div>
-        )}
-      </div>
+      <BinderSpread nav={nav} leftSlots={leftSlots} rightSlots={rightSlots} onSlotView={handleSlotView} />
 
-      <PageNav
-        page={singlePage ? activePage + half : (activePage + 1) / 2}
-        onPrev={() => flip(-1)}
-        onNext={() => flip(1)}
-        prevDisabled={activePage <= 1 && (!singlePage || half === 0)}
-        onJump={(n) => (singlePage ? goToPage(n) : setActivePage(n * 2 - 1))}
-      >
+      <PageNav {...nav.pageNavProps()}>
         <NavBtn onClick={() => setSearchOpen(true)}>Search</NavBtn>
       </PageNav>
 
@@ -171,7 +128,7 @@ export default function SharedBinderView({ token }) {
                   className="find-in-binder-result"
                   onClick={() => handleSelectResult(slot.page_number)}
                 >
-                  <img src={slot.card_image} alt={slot.card_name} />
+                  <img src={thumbnailUrl(slot.card_image)} alt={slot.card_name} loading="lazy" decoding="async" />
                   <span>{slot.card_name}</span>
                   <span>Page {slot.page_number}</span>
                 </button>

@@ -153,7 +153,7 @@
 .card:not(.masked)[data-rarity="rare shiny v"] .card__shine:after {
 
   --mask: none;
-  --foil: url("/img/illusion.png"); 
+  --foil: url("/img/illusion.webp"); 
   --imgsize: 33%;
 
   -webkit-mask-image: var(--mask);

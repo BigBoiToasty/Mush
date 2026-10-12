@@ -1,4 +1,4 @@
-import { getBinders, getAllBinderSlots } from './cards'
+import { getBinders, getAllBinderSlots } from './binderDb'
 import { cacheSlots } from './offlineCache'
 
 export function groupSlotsByPage(slots) {

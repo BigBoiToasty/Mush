@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { groupSlotsByPage, uniqueImageUrls, syncAllForOffline } from './offlineSync'
 
-vi.mock('./cards', () => ({
+vi.mock('./binderDb', () => ({
   getBinders: vi.fn(),
   getAllBinderSlots: vi.fn(),
 }))
-import { getBinders, getAllBinderSlots } from './cards'
+import { getBinders, getAllBinderSlots } from './binderDb'
 
 describe('groupSlotsByPage', () => {
   it('groups slots by their page_number', () => {

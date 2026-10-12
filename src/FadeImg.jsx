@@ -1,6 +1,11 @@
 import { useState } from 'react'
 import LoadingDots from './LoadingDots'
 
+// Images already shown once this session: the same picture re-mounting
+// (e.g. a binder card upgrading from plain image to holo card) appears at
+// once instead of flashing the placeholder again.
+const shown = new Set()
+
 // Card image that shows a "Loading..." placeholder in place of the browser's
 // default blank-then-half-drawn image while bytes are still streaming in,
 // then cross-fades to the real <img> once it's decoded. onLoad/onError both
@@ -11,7 +16,7 @@ import LoadingDots from './LoadingDots'
 // breaks any test importing it in a non-jsdom environment. CardSlot.jsx
 // (and its BinderGrid.jsx test) need this without pulling that in.
 export default function FadeImg({ src, alt, className }) {
-  const [loaded, setLoaded] = useState(false)
+  const [loaded, setLoaded] = useState(() => shown.has(src))
   return (
     <>
       {!loaded && <div className="loading-box"><LoadingDots /></div>}
@@ -20,7 +25,7 @@ export default function FadeImg({ src, alt, className }) {
         alt={alt}
         className={className}
         style={{ display: loaded ? undefined : 'none' }}
-        onLoad={() => setLoaded(true)}
+        onLoad={() => { shown.add(src); setLoaded(true) }}
         onError={() => setLoaded(true)}
       />
     </>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getBinders, createBinders, renameBinders, deleteBinders, getCards, saveCards, deleteCard, findCardsByName, findCardsByNameAllBinders, backfillCardNames, getBinderCounts, getBinderWorth, getBinderShareToken, setBinderShareToken, getSetCompletion, getSetCards } from './cards'
+import { getBinders, createBinders, renameBinders, deleteBinders, getCards, saveCards, deleteCard, findCardsByName, findCardsByNameAllBinders, backfillCardNames, getBinderCounts, getLastPage, getBinderWorth, getBinderShareToken, setBinderShareToken, cardToSlot } from './binderDb'
+import { getSetCompletion, getSetCards } from './sets'
 import { writeOrQueue } from './offlineQueue'
 
 // Shares one in-flight lookup-or-create promise per userId, so two concurrent
@@ -20,7 +21,8 @@ function initBinder(userId) {
       const binders = await getBinders(userId)
       if (binders.length === 0) return createBinders('My Binder', userId)
       const lastId = sessionStorage.getItem(lastBinderKey(userId))
-      return binders.find((b) => b.id === lastId) ?? binders[0]
+      // sessionStorage holds strings; binder ids are numbers
+      return binders.find((b) => String(b.id) === lastId) ?? binders[0]
     })().finally(() => binderInit.delete(userId))
     binderInit.set(userId, promise)
   }
@@ -63,17 +65,7 @@ export function useBinder(userId) {
   // offlineQueue); a thrown error here means a real server-side failure.
   const placeCard = useCallback(async (pageNumber, slotNumber, card) => {
     if (!binderId) return
-    const slot = {
-      binder_id: binderId,
-      page_number: pageNumber,
-      slot_number: slotNumber,
-      card_id: card.cardId,
-      card_image: card.cardImage,
-      variant: card.variant ?? null,
-      card_name: card.cardName ?? null,
-      language: card.language ?? 'en',
-      custom_foil_type: card.customFoilType ?? null,
-    }
+    const slot = cardToSlot(binderId, pageNumber, slotNumber, card)
     await writeOrQueue({ type: 'place', slot }, () => saveCards(slot))
   }, [binderId])
 
@@ -119,6 +111,7 @@ export function useBinder(userId) {
   const deleteBinder = useCallback((id) => deleteBinders(id), [])
 
   const getCounts = useCallback(() => getBinderCounts(binderId), [binderId])
+  const fetchLastPage = useCallback(() => getLastPage(binderId), [binderId])
   const getWorth = useCallback(() => getBinderWorth(binderId), [binderId])
   const getShareToken = useCallback(() => getBinderShareToken(binderId), [binderId])
   const setShareToken = useCallback((token) => setBinderShareToken(binderId, token), [binderId])
@@ -126,7 +119,7 @@ export function useBinder(userId) {
 
   return {
     binderId, binderName, loading, error, fetchPage, placeCard, removeCard, findInBinder, findInAllBinders,
-    listBinders, switchBinder, createBinder, renameBinder, deleteBinder, getCounts, getWorth,
+    listBinders, switchBinder, createBinder, renameBinder, deleteBinder, getCounts, fetchLastPage, getWorth,
     getShareToken, setShareToken, getCompletion, getSetCards,
   }
 }

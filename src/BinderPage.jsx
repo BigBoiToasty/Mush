@@ -17,7 +17,7 @@ import SetCompletionOverlay from './SetCompletionOverlay'
 import OfflineReadyOverlay from './OfflineReadyOverlay'
 import BackgroundPicker from './BackgroundPicker'
 import { fontBase, pageBg, binderPageBg, NavBtn, PageNav, ButtonSkinPicker, LoadingScreen } from './ui'
-import { planMove, getBinderBackground, slotToCard } from './binderDb'
+import { getBinderBackground, slotToCard } from './binderDb'
 import { syncAllForOffline } from './offlineSync'
 import { readSlots } from './offlineCache'
 import { flushQueue } from './offlineQueue'
@@ -35,7 +35,7 @@ function CardBanner({ image, onCancel, children }) {
 
 export default function BinderPage({ userId }) {
   const {
-    binderId, binderName, loading, error, fetchPage, placeCard, removeCard, findInBinder, findInAllBinders,
+    binderId, binderName, loading, error, fetchPage, placeCard, removeCard, moveCard, findInBinder, findInAllBinders,
     listBinders, switchBinder, createBinder, renameBinder, deleteBinder, getCounts, fetchLastPage, getWorth,
     getShareToken, setShareToken, getCompletion, getSetCards,
   } = useBinder(userId)
@@ -187,16 +187,11 @@ export default function BinderPage({ userId }) {
     return true
   }
 
-  async function runMove(dest, destCard) {
+  async function runMove(dest) {
     if (!heldCard) return
     const src = { page: heldCard.srcPage, slot: heldCard.srcSlot }
-    const ops = planMove(src, dest, heldCard, destCard)
-    const ok = await runDb(async () => {
-      for (const op of ops) {
-        if (op.type === 'place') await placeCard(op.page, op.slot, op.card)
-        else await removeCard(op.page, op.slot)
-      }
-    }, "Couldn't move the card. Please try again.")
+    if (src.page === dest.page && src.slot === dest.slot) return setHeldCard(null)
+    const ok = await runDb(() => moveCard(src, dest), "Couldn't move the card. Please try again.")
     if (!ok) return
     setHeldCard(null)
     await reloadPages()
@@ -214,13 +209,13 @@ export default function BinderPage({ userId }) {
   }
 
   function handleSlotChoose(pageNumber, slotNumber) {
-    if (heldCard) return runMove({ page: pageNumber, slot: slotNumber }, null)
+    if (heldCard) return runMove({ page: pageNumber, slot: slotNumber })
     if (pendingCard) return placeCardAt(pageNumber, slotNumber, pendingCard)
     setActiveSlot({ pageNumber, slotNumber })
   }
 
   function handleSlotView(pageNumber, slotNumber, slot) {
-    if (heldCard) return runMove({ page: pageNumber, slot: slotNumber }, slotToCard(slot))
+    if (heldCard) return runMove({ page: pageNumber, slot: slotNumber })
     if (pendingCard) return placeCardAt(pageNumber, slotNumber, pendingCard)
     // slotToCard's variant is never undefined: undefined would flip
     // CardDetailPopup into add mode and show the variant picker.

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getBinders, createBinders, renameBinders, deleteBinders, getCards, saveCards, deleteCard, findCardsByName, findCardsByNameAllBinders, backfillCardNames, getBinderCounts, getLastPage, getBinderWorth, getBinderShareToken, setBinderShareToken, cardToSlot } from './binderDb'
+import { getBinders, createBinders, renameBinders, deleteBinders, getCards, saveCards, deleteCard, findCardsByName, findCardsByNameAllBinders, backfillCardNames, getBinderCounts, getLastPage, getBinderWorth, getBinderShareToken, setBinderShareToken, cardToSlot, moveCard as moveCardInDb } from './binderDb'
 import { getSetCompletion, getSetCards } from './sets'
 import { writeOrQueue } from './offlineQueue'
 
@@ -77,6 +77,11 @@ export function useBinder(userId) {
     )
   }, [binderId])
 
+  const moveCard = useCallback(async (src, dest) => {
+    if (!binderId) return
+    await writeOrQueue({ type: 'move', binder_id: binderId, src, dest }, () => moveCardInDb(binderId, src, dest))
+  }, [binderId])
+
   const findInBinder = useCallback(async (query) => {
     if (!binderId) return []
     return findCardsByName(binderId, query)
@@ -118,7 +123,7 @@ export function useBinder(userId) {
   const getCompletion = useCallback(() => getSetCompletion(binderId), [binderId])
 
   return {
-    binderId, binderName, loading, error, fetchPage, placeCard, removeCard, findInBinder, findInAllBinders,
+    binderId, binderName, loading, error, fetchPage, placeCard, removeCard, moveCard, findInBinder, findInAllBinders,
     listBinders, switchBinder, createBinder, renameBinder, deleteBinder, getCounts, fetchLastPage, getWorth,
     getShareToken, setShareToken, getCompletion, getSetCards,
   }

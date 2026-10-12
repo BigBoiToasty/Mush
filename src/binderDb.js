@@ -101,6 +101,24 @@ export async function deleteCard(binderId, pageNumber, slotNumber) {
   }
 }
 
+// Move a card to another slot of the same binder, or swap it with the card
+// already there -- one all-or-nothing database call (supabase/move_card.sql).
+// The card's row moves, so variant, foil and name always travel with it.
+export async function moveCard(binderId, src, dest) {
+  const { error } = await supabase.rpc('move_card', {
+    p_binder_id: binderId,
+    p_src_page: src.page,
+    p_src_slot: src.slot,
+    p_dest_page: dest.page,
+    p_dest_slot: dest.slot,
+  })
+
+  if (error) {
+    console.error('Move error:', error)
+    throw error
+  }
+}
+
 export async function findCardsByName(binderId, query) {
   const { data, error } = await supabase
     .from('binder_slots')
@@ -249,25 +267,6 @@ export async function createBinders(name, userId) {
   return data
 }
 
-// Pure planner for a card move/swap. Returns the ordered write ops BinderPage
-// should execute. Place-before-remove so a failed remove leaves a recoverable
-// duplicate rather than losing the card.
-// ponytail: not atomic -- a failed remove on a cross-page move leaves a dup.
-// Add a DB function only if Mush ever goes multi-user.
-export function planMove(src, dest, heldCard, destCard) {
-  if (src.page === dest.page && src.slot === dest.slot) return []
-  if (!destCard) {
-    return [
-      { type: 'place', page: dest.page, slot: dest.slot, card: heldCard.card },
-      { type: 'remove', page: src.page, slot: src.slot },
-    ]
-  }
-  return [
-    { type: 'place', page: dest.page, slot: dest.slot, card: heldCard.card },
-    { type: 'place', page: src.page, slot: src.slot, card: destCard },
-  ]
-}
-
 export async function renameBinders(binderId, name) {
   const { error } = await supabase
     .from('binders')
@@ -339,19 +338,9 @@ export async function importSlots(binderId, slots) {
   }
 }
 
+// One request: the database removes the binder's slots with it
+// (binder_slots.binder_id is ON DELETE CASCADE), so nothing is left half-deleted.
 export async function deleteBinders(binderId) {
-  // Delete slots first regardless of whether a DB cascade exists on
-  // binder_id -- safe either way, and guarantees no orphaned rows if not.
-  const { error: slotsError } = await supabase
-    .from('binder_slots')
-    .delete()
-    .eq('binder_id', binderId)
-
-  if (slotsError) {
-    console.error('Delete binder slots error:', slotsError)
-    throw slotsError
-  }
-
   const { error } = await supabase
     .from('binders')
     .delete()

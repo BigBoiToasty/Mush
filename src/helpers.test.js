@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest'
-import { planMove } from './binderDb'
 import { cardUrl, hasCJK, pickByExactName } from './tcgdex'
 import { groupOwnedCardsBySet, annotateSetCards } from './sets'
 import { slotsToCsv, csvToSlots } from './csv'
@@ -49,30 +48,6 @@ describe('cardUrl', () => {
 })
 
 const held = { srcPage: 1, srcSlot: 0, card: { cardId: 'a', cardImage: 'a.png', variant: 'holo', cardName: 'A' } }
-
-describe('planMove', () => {
-  it('is a no-op when dropping on the origin slot', () => {
-    expect(planMove({ page: 1, slot: 0 }, { page: 1, slot: 0 }, held, null)).toEqual([])
-  })
-
-  it('moves to an empty slot with place before remove', () => {
-    const ops = planMove({ page: 1, slot: 0 }, { page: 3, slot: 5 }, held, null)
-    expect(ops).toEqual([
-      { type: 'place', page: 3, slot: 5, card: held.card },
-      { type: 'remove', page: 1, slot: 0 },
-    ])
-  })
-
-  it('swaps with an occupied slot using two places and no remove', () => {
-    const destCard = { cardId: 'b', cardImage: 'b.png', variant: 'normal', cardName: 'B' }
-    const ops = planMove({ page: 1, slot: 0 }, { page: 3, slot: 5 }, held, destCard)
-    expect(ops).toEqual([
-      { type: 'place', page: 3, slot: 5, card: held.card },
-      { type: 'place', page: 1, slot: 0, card: destCard },
-    ])
-    expect(ops.some((op) => op.type === 'remove')).toBe(false)
-  })
-})
 
 describe('groupOwnedCardsBySet', () => {
   it('groups owned cards into per-set summaries with counts', () => {

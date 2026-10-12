@@ -346,7 +346,11 @@ export default function LoginCard() {
           onFlip={() => setMode(mode === 'login' ? 'signup' : 'login')}
         />
         </div>
-        <Turnstile onToken={setCaptchaToken} resetKey={captchaReset} />
+        {/* One widget for both faces, in a slot sized to it (300x65) so the
+            notebook doesn't shift when the widget loads or the card flips */}
+        <div style={{ minHeight: 65, display: 'flex', justifyContent: 'center' }}>
+          <Turnstile onToken={setCaptchaToken} resetKey={captchaReset} />
+        </div>
       </div>
     </div>
   )

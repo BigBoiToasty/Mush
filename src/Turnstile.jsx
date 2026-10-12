@@ -39,7 +39,7 @@ export default function Turnstile({ onToken, resetKey }) {
         if (cancelled || !boxRef.current) return
         widgetRef.current = turnstile.render(boxRef.current, {
           sitekey: TURNSTILE_SITE_KEY,
-          appearance: 'interaction-only', // invisible unless Cloudflare wants a click
+          appearance: 'always', // always show the widget (owner wants it visible for now)
           callback: (token) => onTokenRef.current(token),
           'expired-callback': () => onTokenRef.current(null),
           'error-callback': () => onTokenRef.current(null),

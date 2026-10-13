@@ -1,5 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "echo 'nothing to install'",
+  "buildCommand": "mkdir -p vercel-out && cp vercel/sw.js vercel-out/sw.js",
+  "outputDirectory": "vercel-out",
   "redirects": [
     {
       "source": "/",
@@ -7,8 +11,8 @@
       "permanent": true
     },
     {
-      "source": "/:path*",
-      "destination": "https://mush.christopherle.org/:path*",
+      "source": "/((?!sw\\.js$).+)",
+      "destination": "https://mush.christopherle.org/$1",
       "permanent": true
     }
   ]
